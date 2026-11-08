@@ -1,0 +1,17 @@
+{
+  "name": "server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning --watch --env-file-if-exists=../.env src/index.js",
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../.env src/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1"
+  }
+}

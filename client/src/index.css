@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Code editor syntax colours */
+.code-editor-ta:focus { outline: none; }
+.code-editor .token.comment, .code-editor .token.prolog { color: #737373; font-style: italic; }
+.code-editor .token.keyword, .code-editor .token.operator.keyword { color: #c084fc; }
+.code-editor .token.string, .code-editor .token.char { color: #86efac; }
+.code-editor .token.number, .code-editor .token.boolean, .code-editor .token.constant { color: #fdba74; }
+.code-editor .token.function, .code-editor .token.class-name { color: #7dd3fc; }
+.code-editor .token.builtin { color: #5eead4; }
+.code-editor .token.operator, .code-editor .token.punctuation { color: #a3a3a3; }
+.code-editor .token.property, .code-editor .token.variable { color: #e5e5e5; }
