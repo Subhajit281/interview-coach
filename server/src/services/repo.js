@@ -51,6 +51,18 @@ export function createRepo(db) {
     interviewQuestions: (iid) => q('SELECT topic, title FROM questions_asked WHERE interview_id = ? ORDER BY id').all(iid),
     recentQuestionTitles: (mode, limit = 25) =>
       q('SELECT title FROM questions_asked WHERE mode = ? ORDER BY id DESC LIMIT ?').all(mode, limit).map((r) => r.title),
+    // Question themes used in recent interviews of this mode, newest first. Read from the per-message meta JSON, so no schema change.
+    recentSeeds: (mode, limit = 150) => {
+      const rows = q(
+        `SELECT m.meta FROM messages m JOIN interviews i ON i.id = m.interview_id
+         WHERE i.mode = ? AND m.role = 'interviewer' AND m.meta LIKE '%"seed"%' ORDER BY m.id DESC LIMIT ?`,
+      ).all(mode, limit);
+      const out = [];
+      for (const r of rows) {
+        try { const sd = JSON.parse(r.meta).seed; if (sd) out.push(sd); } catch { /* ignore */ }
+      }
+      return out;
+    },
 
     // reports + stats
     saveReport: (iid, overall, scores, report) => q(

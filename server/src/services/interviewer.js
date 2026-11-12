@@ -1,6 +1,6 @@
 import { extractJson } from './llm.js';
 import { MODES } from '../data/modes.js';
-import { COMPANIES } from '../data/companies.js';
+import { pickBlueprint, planQuestions } from './blueprint.js';
 import { buildSystemPrompt } from './prompts.js';
 import { pickFocus, seededRng } from './repo.js';
 import { ProviderError } from './http.js';
@@ -83,13 +83,20 @@ export function createInterviewer({ repo, llm }) {
     // The seed changes with every new question, so the topic focus rotates instead of staying fixed all interview.
     const rng = seededRng(interviewId * 7919 + asked.length * 131);
     const focusTopics = pickFocus(mode.topics, repo.topicStats(iv.mode), iv.mode, 3, rng);
-    const bank = COMPANIES[iv.company]?.bank;
-    const pool = bank ? [...(iv.mode === 'behavioral' ? bank.hr : bank.technical)].sort(() => rng() - 0.5).slice(0, 6) : [];
+    // Blueprint for the next main question: a fresh theme (rotated across past interviews), an angle and a difficulty level.
+    const sessionSeeds = history.map(parseMeta).map((m) => m?.seed).filter(Boolean);
+    const blueprint = pickBlueprint({
+      mode: iv.mode, company: iv.company, difficulty: iv.difficulty, askedCount: asked.length, sat: thread.sat,
+      recentSeeds: repo.recentSeeds(iv.mode, 150), sessionSeeds,
+      rng: seededRng(interviewId * 104729 + asked.length * 7919 + history.length * 31 + 17),
+    });
+    const plan = { total: planQuestions({ durationMin: iv.duration_min, style: iv.style, mode: iv.mode }), asked: asked.length };
     const system = buildSystemPrompt({
       interview: iv,
       focusTopics,
-      companyPool: pool,
-      askedTitles: repo.recentQuestionTitles(iv.mode, 25),
+      blueprint,
+      plan,
+      askedTitles: repo.recentQuestionTitles(iv.mode, 40).map((t) => t.slice(0, 90)),
       weaknesses: repo.recentWeaknesses(3, 6, iv.mode),
       project: iv.project_id ? repo.getProject(iv.project_id) : null,
       elapsedSec,
@@ -105,22 +112,40 @@ export function createInterviewer({ repo, llm }) {
 
     let { res, reply } = await ask(system, messages);
 
-    // Guardrails: one corrective retry when the model skips the counter-question or judges without evidence.
+    // Guardrails: up to two corrective retries when the model closes early, skips the counter-question or judges without evidence.
     const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
     const genuine = lastCand && lastCand.content !== NO_RESPONSE;
-    const timeLeft = iv.duration_min - elapsedSec / 60 > iv.duration_min * 0.2;
-    let correction = '';
-    if (genuine && reply.newQuestion && !reply.candidateStuck && reply.verdict !== 'stray' && thread.followups < min && timeLeft && !reply.wrapUp) {
-      correction = `You moved to a new question after only ${thread.followups} follow-up(s); at least ${min} are required. Do NOT change the question. Re-read the candidate's last answer and ask ONE counter-question about a specific claim, gap, edge case or trade-off in it. Set new_question false.`;
-    } else if (genuine && ['incorrect', 'unclear'].includes(reply.verdict) && reply.analysis.length < 30) {
-      correction = 'You judged the last answer incorrect or unclear without naming the specific statement or gap. Re-analyse it carefully: quote what the candidate actually said, decide what is right and what is wrong, and only then reply. If the answer was merely incomplete, say so and ask a targeted counter-question.';
-    }
-    if (correction) {
+    const remainingMin = iv.duration_min - elapsedSec / 60;
+    const timeLeft = remainingMin > iv.duration_min * 0.2;
+    // Closing is only allowed in the final stretch (the same threshold the prompt uses) or once time is up.
+    const closeAllowed = remainingMin <= Math.max(3, iv.duration_min * 0.08);
+    const diagnose = (r) => {
+      if (r.wrapUp && !r.endInterview && !closeAllowed) {
+        const how = genuine && thread.followups < min
+          ? 'Ask ONE counter-question about a specific claim, gap or edge case in the candidate\'s last answer.'
+          : `Pose a NEW main question now, built from the blueprint theme "${blueprint.seed || 'any fresh topic of this mode'}" (angle: ${blueprint.angle}); set new_question true with a short question_title.`;
+        return `You tried to close the interview with about ${Math.round(remainingMin)} minutes left. Do NOT conclude, thank the candidate for their time or say goodbye. Set wrap_up false. ${how}`;
+      }
+      if (genuine && r.newQuestion && !r.candidateStuck && r.verdict !== 'stray' && thread.followups < min && timeLeft && !r.wrapUp) {
+        return `You moved to a new question after only ${thread.followups} follow-up(s); at least ${min} are required. Do NOT change the question. Re-read the candidate's last answer and ask ONE counter-question about a specific claim, gap, edge case or trade-off in it. Set new_question false.`;
+      }
+      if (genuine && ['incorrect', 'unclear'].includes(r.verdict) && r.analysis.length < 30) {
+        return 'You judged the last answer incorrect or unclear without naming the specific statement or gap. Re-analyse it carefully: quote what the candidate actually said, decide what is right and what is wrong, and only then reply. If the answer was merely incomplete, say so and ask a targeted counter-question.';
+      }
+      return '';
+    };
+    let corrections = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const c = diagnose(reply);
+      if (!c) break;
+      corrections += `\n\nCORRECTION: ${c}`;
       try {
-        const retry = await ask(`${system}\n\nCORRECTION: ${correction}`, messages);
-        if (retry.reply.say || retry.reply.verdict === 'stray') { res = retry.res; reply = retry.reply; }
-      } catch { /* keep the first reply */ }
+        const retry = await ask(`${system}${corrections}`, messages);
+        if (retry.reply.say || retry.reply.verdict === 'stray') { res = retry.res; reply = retry.reply; } else break;
+      } catch { break; /* keep the previous reply */ }
     }
+    // Last resort: the server, not the model, decides when the session may close.
+    if (reply.wrapUp && !reply.endInterview && !closeAllowed) reply.wrapUp = false;
 
     // Stray input that slipped past the filter: drop it silently, change nothing.
     if (lastCand && lastCand.content !== NO_RESPONSE && reply.verdict === 'stray') {
@@ -139,7 +164,9 @@ export function createInterviewer({ repo, llm }) {
     reply.endInterview = reply.endInterview && strikes >= MAX_STRIKES;
     if (reply.endInterview) reply.wrapUp = true;
 
-    repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict ? { analysis: reply.analysis, verdict: reply.verdict } : null);
+    // The theme is recorded with the question so later interviews rotate away from it.
+    const seed = reply.newQuestion && blueprint.seed ? blueprint.seed : undefined;
+    repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict || seed ? { analysis: reply.analysis, verdict: reply.verdict, seed } : null);
     if (reply.newQuestion && reply.questionTitle) {
       repo.addQuestion(interviewId, iv.mode, reply.topic, reply.questionTitle, iv.difficulty);
     }

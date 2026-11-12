@@ -9,6 +9,9 @@ import { MODES } from '../src/data/modes.js';
 import { createApp } from '../src/app.js';
 import { ProviderError } from '../src/services/http.js';
 import { isStrayInput } from '../src/services/stray.js';
+import { pickBlueprint, planQuestions, levelFor } from '../src/services/blueprint.js';
+import { COMPANIES } from '../src/data/companies.js';
+import { GENERIC_POOL } from '../src/data/questionPool.js';
 import { autoPairEdit } from '../../client/src/lib/autoPair.js';
 
 function fakeLlm(script) {
@@ -292,7 +295,7 @@ test('tech mahindra profile injects its question pool; AI roles add role guidanc
   try {
     await call('/interviews', 'POST', { ...CFG, mode: 'core_cs', company: 'techmahindra', position: 'AI Engineer Intern', round: 'Technical interview' });
     const sys = llm.calls[0].system;
-    assert.ok(sys.includes('Tech Mahindra') && sys.includes('COMPANY QUESTION POOL'));
+    assert.ok(sys.includes('Tech Mahindra') && sys.includes('NEXT QUESTION BLUEPRINT') && sys.includes('Technical interview ('));
     assert.ok(sys.includes('Intern-level AI engineer'));
   } finally { close(); }
 });
@@ -335,4 +338,86 @@ test('auto-pairing behaves like VS Code', () => {
   assert.equal(k('    x = {}', 9, 'Enter').insert, '\n        \n    ');
   assert.equal(k('plain', 5, 'Enter'), null);
   assert.equal(k('it', 2, "'", 2, 'plain'), null);
+});
+
+test('every company has themes for its main modes and a focus for each round', () => {
+  for (const [id, c] of Object.entries(COMPANIES)) {
+    if (id === 'generic') continue;
+    for (const mode of ['dsa', 'core_cs', 'system_design', 'behavioral']) assert.ok(c.bank[mode]?.length >= 5, `${id}/${mode}`);
+    for (const r of c.rounds) assert.ok(c.roundFocus[r], `${id} round ${r}`);
+  }
+  for (const mode of ['dsa', 'core_cs', 'system_design', 'behavioral', 'sql', 'ai_ml', 'project']) assert.ok(GENERIC_POOL[mode].length >= 15, mode);
+});
+
+test('blueprint rotates: recent themes are avoided and company themes dominate', () => {
+  const bank = COMPANIES.amazon.bank.behavioral;
+  const recent = bank.slice(0, 5); // five most recently used
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    const b = pickBlueprint({ mode: 'behavioral', company: 'amazon', difficulty: 'Medium', recentSeeds: recent, rng: seededRng(i + 1) });
+    assert.ok(!recent.includes(b.seed), 'recent theme reused');
+    seen.add(b.seed);
+  }
+  assert.ok(seen.size > 15, `only ${seen.size} distinct themes`);
+  let company = 0;
+  for (let i = 0; i < 300; i++) if (bank.includes(pickBlueprint({ mode: 'behavioral', company: 'amazon', difficulty: 'Easy', rng: seededRng(i + 7) }).seed)) company++;
+  assert.ok(company > 120, `company themes only ${company}/300`);
+  // pool exhausted: repeats allowed, except in the current session
+  const all = [...bank, ...GENERIC_POOL.behavioral];
+  const b = pickBlueprint({ mode: 'behavioral', company: 'amazon', difficulty: 'Hard', recentSeeds: all, sessionSeeds: all.slice(1), rng: seededRng(3) });
+  assert.equal(b.seed, all[0]);
+});
+
+test('difficulty and pacing drive the blueprint and the question plan', () => {
+  assert.equal(levelFor({ difficulty: 'Hard' }), 'Hard');
+  assert.equal(levelFor({ difficulty: 'Mixed', askedCount: 0 }), 'Easy');
+  assert.equal(levelFor({ difficulty: 'Mixed', askedCount: 1 }), 'Medium');
+  assert.equal(levelFor({ difficulty: 'Mixed', askedCount: 1, sat: [5, 4, 5] }), 'Hard');
+  assert.equal(levelFor({ difficulty: 'Mixed', askedCount: 4, sat: [1, 2] }), 'Medium');
+  assert.ok(planQuestions({ durationMin: 60, style: 'rapid', mode: 'core_cs' }) > planQuestions({ durationMin: 60, style: 'deep', mode: 'core_cs' }));
+  assert.ok(planQuestions({ durationMin: 15, style: 'deep', mode: 'dsa' }) >= 2);
+});
+
+test('themes are recorded with the question and rotate across interviews of the same mode', async () => {
+  const { call, llm, close } = await boot([
+    reply({ say: 'First.', new_question: true, question_title: 'Q1' }),
+    reply({ say: 'Second.', new_question: true, question_title: 'Q1' }),
+  ]);
+  try {
+    const cfg = { ...CFG, mode: 'dsa', company: 'google' };
+    const a = (await call('/interviews', 'POST', cfg)).data.interview.id;
+    const seedA = /theme: ([^;]+);/.exec(llm.calls[0].system)[1];
+    await call(`/interviews/${a}/end`, 'POST', { elapsedSec: 10 }).catch(() => {});
+    await call('/interviews', 'POST', cfg);
+    const seedB = /theme: ([^;]+);/.exec(llm.calls[1].system)[1];
+    assert.notEqual(seedA, seedB);
+  } finally { close(); }
+});
+
+test('the interviewer cannot close a long session early: server forces a new question', async () => {
+  const { call, llm, close } = await boot([
+    reply({ say: 'Explain virtual memory.', new_question: true, question_title: 'VM', topic: 'Operating Systems' }),
+    reply({ analysis: 'Solid.', verdict: 'correct', say: 'Thank you for your time. That concludes the interview.', wrap_up: true, satisfaction: 5 }),
+    reply({ analysis: 'Solid.', verdict: 'correct', say: 'Let us move to networking. What happens when you type a URL?', new_question: true, question_title: 'URL', topic: 'Computer Networks', satisfaction: 5 }),
+  ]);
+  try {
+    const id = (await call('/interviews', 'POST', { ...CFG, durationMin: 60 })).data.interview.id;
+    // two prior follow-ups so the minimum probes are satisfied
+    await call(`/interviews/${id}/turn`, 'POST', { text: 'It maps virtual to physical addresses using page tables.', elapsedSec: 600 });
+    assert.ok(llm.calls.length >= 3);
+    assert.ok(llm.calls[2].system.includes('You tried to close the interview'));
+    assert.ok(llm.calls[1].system.includes('There is plenty of time'));
+  } finally { close(); }
+});
+
+test('closing is allowed in the final stretch', async () => {
+  const { call, close } = await boot([
+    reply({ say: 'First.', new_question: true, question_title: 'Q1' }),
+    reply({ analysis: 'Fine.', verdict: 'correct', say: 'Thank you. That concludes our time.', wrap_up: true }),
+  ]);
+  try {
+    const id = (await call('/interviews', 'POST', { ...CFG, durationMin: 30 })).data.interview.id;
+    const r = await call(`/interviews/${id}/turn`, 'POST', { text: 'A full and correct answer to the question.', elapsedSec: 29 * 60 });
+    assert.equal(r.data.wrapUp, true);
+  } finally { close(); }
 });

@@ -5,7 +5,7 @@ const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n)}…` : s || '');
 
 export function buildSystemPrompt({
   interview, focusTopics = [], askedTitles = [], weaknesses = [], project = null, elapsedSec = 0, strikes = 0, maxStrikes = 5,
-  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, companyPool = [],
+  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null,
 }) {
   const mode = MODES[interview.mode];
   const company = COMPANIES[interview.company] || COMPANIES.generic;
@@ -15,18 +15,23 @@ export function buildSystemPrompt({
   const remaining = total - elapsedSec / 60;
   const minProbes = thread.min ?? 2;
 
-  let timing = `Time used: ${elapsedMin} of ${total} min.`;
+  const finalStretch = remaining <= Math.max(3, total * 0.08);
+  let timing = `Time used: ${elapsedMin} of ${total} min (about ${Math.max(0, Math.round(remaining))} min remain).`;
   if (remaining <= 0) timing += ' TIME IS UP: close the interview politely in this reply, ask no new question, set wrap_up true.';
-  else if (remaining <= total * 0.2) timing += ' Little time left: converge, wrap up the current thread, do not open a big new question.';
+  else if (finalStretch) timing += ' FINAL STRETCH: finish the current thread; one short last question is acceptable; then close the interview courteously.';
+  else timing += ' There is plenty of time: do NOT wrap up, summarise, thank the candidate for their time or say goodbye. Keep the session full of substantive questions until the final stretch.';
+  const planLine = plan ? `PLAN: about ${plan.total} main questions fit this session and ${plan.asked} have been asked so far, so keep going: there is always more to ask.` : '';
+  const roundFocus = company.roundFocus?.[interview.round];
 
   const lines = [
     'You are a human technical interviewer running a live VOICE interview. Your "say" text is read aloud by text-to-speech.',
     '',
     `SETUP: Company style: ${company.name}. ${company.style}`,
     `Position: ${interview.position}. ${ROLES[interview.position] || ''}`,
-    `Round: ${interview.round || 'General'}. Mode: ${mode.label}. Difficulty: ${interview.difficulty}${interview.difficulty === 'Mixed' ? ' (start easier, increase difficulty as the candidate succeeds)' : ''}.`,
+    `Round: ${interview.round || 'General'}${roundFocus ? ` (${roundFocus})` : ''}. Mode: ${mode.label}. Difficulty: ${interview.difficulty}${interview.difficulty === 'Mixed' ? ' (start easier, increase difficulty as the candidate succeeds)' : ''}.`,
     `Pacing: ${STYLES[interview.style] || STYLES.standard}`,
     timing,
+    planLine,
     '',
     `PERSONALITY (${personality.label}): ${personality.prompt}`,
     '',
@@ -59,6 +64,10 @@ export function buildSystemPrompt({
     'DYNAMIC FLOW: After the minimum probes, keep a private satisfaction level (1 very dissatisfied to 5 fully satisfied) for the current question. Satisfied (4-5): acknowledge briefly and neutrally, then move to a NEW question on a different topic or angle. Neutral (3): one or two more probes. ' +
       'Dissatisfied (1-2) after two honest attempts (a hint counts as one): say calmly that you will move on and pose a different, possibly easier question. Never spend the whole interview on one topic, vary question types and difficulty with performance, and never reuse an angle you already used. ' +
       'Do not ask more than two questions from the same topic.',
+    'NEVER CLOSE EARLY: Do not conclude the interview, thank the candidate for their time or say it is over before the FINAL STRETCH. Running out of ideas is not a reason to stop: use the NEXT QUESTION BLUEPRINT and the FOLLOW-UP LADDER below, ' +
+      'and ask about any part of the selected mode, not only what was discussed so far. Only set wrap_up true in the final stretch or when time is up.',
+    'FOLLOW-UP LADDER (when a thread needs more depth): change a constraint; scale the input or traffic 1000x; require streaming or online processing; add concurrency or failure; ask for tests and edge cases; ask for a correctness argument; ask for an alternative approach and compare; ask what they would monitor in production.',
+    'VARIETY: Never open with the most common textbook question for a topic unless the blueprint theme is exactly that. Prefer fresh variants and realistic scenarios, and vary the question type (explain, debug, design, compare, predict, trace) across the session.',
     'NEVER END ON WORDS: Treat what the candidate says as ordinary content. Words like "thank you", "bye", "stop", "that is all", "terminate" or "done" never end the interview or trigger wrap-up; the candidate ends the session with a button.',
     'NO RESPONSE: A message of "[NO RESPONSE]" means the candidate stayed silent after being given generous time. It is not a refusal and not a reason to end.',
     `UNANSWERED STREAK: ${strikes} consecutive turn(s) with no usable answer. Escalate gently, only as far as the streak requires: 1 -> say briefly that they may take their time, without restating or changing the question; 2 -> restate or simplify the question once and invite them to think aloud; ` +
@@ -70,7 +79,13 @@ export function buildSystemPrompt({
   if (askedHere.length) lines.push(`Questions already asked in THIS interview (never repeat or rephrase): ${askedHere.join('; ')}.`);
   if (coveredTopics.length) lines.push(`Topics already covered in this interview (prefer other topics for the next question): ${coveredTopics.join(', ')}.`);
   if (focusTopics.length) lines.push('', `Topic focus (prefer these for new questions, weaker first): ${focusTopics.join(', ')}.`);
-  if (companyPool.length) lines.push(`COMPANY QUESTION POOL (themes reported for ${company.name} in recent years; draw on them, adapt the wording, never read them out as a list): ${companyPool.join(' | ')}.`);
+  if (blueprint) {
+    lines.push(
+      '',
+      `NEXT QUESTION BLUEPRINT (use it whenever you pose a NEW main question; it is not for counter-questions): ${blueprint.seed ? `theme: ${blueprint.seed}; ` : ''}angle: ${blueprint.angle}; target level: ${blueprint.level} (${blueprint.levelText}).`,
+      `Shape the question for ${company.name} and the ${interview.position} level, and adapt the wording freely: the theme is a starting point, not a script. If the candidate\'s project or earlier answers make the theme a poor fit, pick a closely related fresh theme, never a classic overused one.`,
+    );
+  }
   if (askedTitles.length) lines.push(`Questions asked in past ${mode.label} interviews (avoid repeating): ${askedTitles.join('; ')}.`);
   if (weaknesses.length) lines.push(`Recurring weaknesses from past ${mode.label} reports (probe only if they fit the current question naturally): ${weaknesses.join('; ')}.`);
   if (project) lines.push('', `CANDIDATE PROJECT "${project.name}":\n${clip(project.description, 6000)}`);
@@ -83,7 +98,7 @@ export function buildSystemPrompt({
     '- verdict: one of "correct", "partial", "incorrect", "unclear", "off_topic", "stray", "none" (use "none" for the opening turn and for [NO RESPONSE]).',
     '- board: full problem/schema text when posing a new question, otherwise "".',
     '- topic: one topic from the mode topic list. new_question: true only when you pose a brand new main question; then give a short question_title.',
-    '- hint_given: true if this reply gives the candidate a hint. wrap_up: true only when closing the interview.',
+    '- hint_given: true if this reply gives the candidate a hint. wrap_up: true only when closing the interview (final stretch or time up).',
     '- candidate_stuck: true if the candidate\'s latest message gave no usable answer (silence, "I do not know", nothing relevant); false otherwise, including for partial or wrong but genuine attempts.',
     '- satisfaction: integer 1-5, your private satisfaction with the candidate\'s handling of the current thread after their latest message.',
     `- end_interview: true ONLY when the unanswered streak has reached ${maxStrikes} and you are still unsatisfied after trying to move the interview forward; otherwise always false.`,
