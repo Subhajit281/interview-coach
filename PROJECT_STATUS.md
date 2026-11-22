@@ -21,8 +21,15 @@
 - Professional tone prompt and better default TTS voice; VS Code-style auto-closing brackets/quotes in the code editor.
 - Performance: clock isolated from the editor (no per-second re-highlight), editor lazy-loaded, prepared-statement cache, only latest board resent to the model, lower temperature.
 
+## Update v5 (model selection and limit handling)
+- Users pick their Groq and Gemini model from dropdowns (Settings -> AI models). Only ids in `server/src/data/models.js` are accepted, so a typo can never reach a provider; edit that file to add or retire models.
+- The env default model runs untouched until it hits its free daily limit. The interview then pauses (clock stopped, answer saved), a red "Model limit reached" popup opens, and the same turn is retried once a model is mounted. Works for start, turns and report generation.
+- A chosen model is test-called with the user's own key (`POST /api/models/check`) before it is mounted. Choices are stored per account in the browser and sent as `X-Model-Prefs`; no database change.
+- Provider errors are classified (limit, model unavailable, bad key) and returned as readable messages with a `code`; raw provider responses never reach the browser.
+- A user-chosen Groq model replaces the hidden same-provider backup, and the backup is skipped when a provider's quota is gone, so the user decides. If both keys are connected, the other provider still takes over silently.
+
 ## Verified in this build environment
-- `npm test`: 36/36 pass (retry/backoff, provider fallback, request shapes for Groq/Gemini, hallucination filter, full interview flow incl. pause/retry/end/report/stats, validation, adaptive weighting).
+- `npm test`: 49/49 pass (v5 adds model-limit tests) (retry/backoff, provider fallback, request shapes for Groq/Gemini, hallucination filter, full interview flow incl. pause/retry/end/report/stats, validation, adaptive weighting).
 - `npm run build`: client builds. `npm start`: serves UI and API; no-key paths return clear errors.
 
 ## NOT verified (needs your machine and keys)

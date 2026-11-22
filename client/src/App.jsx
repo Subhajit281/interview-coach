@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { api } from './lib/api.js';
+import { api, modelPrefs } from './lib/api.js';
 import Dashboard from './components/Dashboard.jsx';
 import Configure from './components/Configure.jsx';
 import Interview from './components/Interview.jsx';
 import Report from './components/Report.jsx';
 import Auth from './components/Auth.jsx';
 import ApiKeys from './components/ApiKeys.jsx';
+import { ModelGateProvider, ModelSettings } from './components/ModelPicker.jsx';
 import { EqualizerLoader, ConfirmModal } from './components/ui.jsx';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
   // In-app confirmation dialog states (no native browser alerts)
   const [leaveTarget, setLeaveTarget] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('keys');
 
   // Initialize session and prefetch metadata concurrently to minimize loading wait time
   useEffect(() => {
@@ -46,6 +48,9 @@ export default function App() {
       api.meta().then(setMeta).catch((e) => setErr(e.message));
     }
   }, [user, credentials, meta]);
+
+  // Model choices are remembered per account on this browser.
+  modelPrefs.setOwner(user?.id || user?.email);
 
   const active = view.name === 'interview';
   const leave = (next) => {
@@ -113,6 +118,7 @@ export default function App() {
   }
 
   return (
+    <ModelGateProvider>
     <div className="min-h-screen bg-[#050806] text-neutral-200">
       {/* Sleek top navigation */}
       <header className="sticky top-0 z-50 border-b border-[#16231a] bg-[#070c09]/90 backdrop-blur-md">
@@ -220,14 +226,42 @@ export default function App() {
         )}
 
         {view.name === 'keys' && (
-          <ApiKeys
-            settings
-            status={credentials}
-            onSaved={(newCreds) => {
-              setCredentials(newCreds);
-              api.meta().then(setMeta).catch((e) => setErr(e.message));
-            }}
-          />
+          <div className="mx-auto flex max-w-4xl flex-col gap-4 md:flex-row md:items-start">
+            {/* Settings tabs: left panel on desktop, a row on small screens */}
+            <nav className="flex shrink-0 gap-1.5 md:sticky md:top-20 md:w-44 md:flex-col" aria-label="Settings sections">
+              {[['keys', 'Manage API keys'], ['models', 'AI models']].map(([id, label]) => (
+                <button
+                  key={id}
+                  className={`rounded-[6px] px-3 py-2 text-left text-xs font-medium transition-all ${
+                    settingsTab === id
+                      ? 'border border-[#1c2d22] bg-[#0e1711] text-emerald-300 shadow-sm'
+                      : 'border border-transparent text-neutral-400 hover:bg-[#0c140f] hover:text-neutral-200'
+                  }`}
+                  onClick={() => setSettingsTab(id)}
+                  aria-current={settingsTab === id ? 'page' : undefined}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="min-w-0 flex-1 [&>div]:mx-0">
+              {settingsTab === 'keys' ? (
+                <ApiKeys
+                  settings
+                  status={credentials}
+                  onSaved={(newCreds) => {
+                    setCredentials(newCreds);
+                    api.meta().then(setMeta).catch((e) => setErr(e.message));
+                  }}
+                />
+              ) : (
+                <div className="max-w-xl">
+                  <ModelSettings credentials={credentials} />
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </main>
 
@@ -258,5 +292,6 @@ export default function App() {
         onCancel={() => setShowLogoutConfirm(false)}
       />
     </div>
+    </ModelGateProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { useModelGate } from './ModelPicker.jsx';
 import { Button, Card, ScoreBar, Badge, EqualizerLoader, fmtDate } from './ui.jsx';
 
 const LABELS = {
@@ -33,6 +34,7 @@ export default function Report({ id, note, onBack, onNew }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const { guard } = useModelGate();
 
   const load = () => api.interview(id).then(setData).catch((e) => setErr(e.message));
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function Report({ id, note, onBack, onNew }) {
     setBusy(true);
     setErr('');
     try {
-      await api.regenerateReport(id);
+      await guard(() => api.regenerateReport(id));
       await load();
     } catch (e) {
       setErr(e.message);

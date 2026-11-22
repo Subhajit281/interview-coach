@@ -57,6 +57,15 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
     let status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
     if (err.name === 'ProviderError' && status !== 503 && status !== 429) status = 502;
     if (status >= 500) console.error(err.name, err.message);
+    // Errors that carry a publicMessage are safe to show and tell the UI what to do (e.g. open the model picker).
+    if (err.publicMessage) {
+      const { code, provider, model, reason, exhausted } = err;
+      return res.status(status).json({ error: err.publicMessage, code, provider, model, reason, exhausted });
+    }
+    // Any other provider rate limit (e.g. voice transcription) never leaks the raw provider response.
+    if (err.name === 'ProviderError' && err.status === 429) {
+      return res.status(429).json({ error: 'The AI service is busy right now. Please wait a moment and try again.', code: 'PROVIDER_BUSY' });
+    }
     res.status(status).json({ error: status >= 500 ? 'The server could not complete that request.' : (err.message || 'Request failed.') });
   });
   return app;

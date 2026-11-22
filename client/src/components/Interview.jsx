@@ -4,6 +4,7 @@ import { VoiceInput } from '../lib/voiceInput.js';
 import { speak, cancelSpeech, englishVoices, ttsSupported, detectGenderFromText } from '../lib/tts.js';
 import { Button, Card, Field, inputCls, Badge, EqualizerLoader, ConfirmModal, fmtTime } from './ui.jsx';
 import Visualizer from './Visualizer.jsx';
+import { useModelGate } from './ModelPicker.jsx';
 import { LANGS } from '../lib/langs.js';
 
 const CodeEditor = lazy(() => import('./CodeEditor.jsx'));
@@ -18,11 +19,12 @@ const LABEL = {
   transcribing: 'Transcribing speech to text…',
   idle: 'Mic idle',
   paused: 'Interview paused',
+  model_wait: 'Paused. Choose a new AI model to continue',
   ending: 'Generating comprehensive evaluation report…',
   failed: 'Could not connect to interview session',
 };
 
-const BUSY = ['starting', 'ai_thinking', 'transcribing', 'ending', 'failed'];
+const BUSY = ['starting', 'ai_thinking', 'transcribing', 'ending', 'failed', 'model_wait'];
 
 const DEFAULTS = { silenceMs: 3500, readSec: 8, idleSec: 120, rate: 1, voiceURI: '', bargeIn: false, autoMic: false };
 function loadSettings() {
@@ -80,6 +82,8 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   const [phase, setPhaseState] = useState('starting');
   const [error, setError] = useState('');
   const [canRetry, setCanRetry] = useState(false);
+  const [modelBlocked, setModelBlocked] = useState(false);
+  const { guard } = useModelGate();
   const [notice, setNotice] = useState('');
   const [text, setText] = useState('');
   const [code, setCode] = useState('');
@@ -194,8 +198,18 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
     go('ai_thinking');
     setError('');
     setCanRetry(false);
+    setModelBlocked(false);
     try {
-      const r = await api.turn(idRef.current, { text: userText || undefined, elapsedSec: elapsedRef.current });
+      // If the model's limit is hit, the interview waits here (clock stopped, answer kept) until a new model is mounted.
+      // The answer is stored server-side by the first attempt, so retries send no text (nothing is duplicated).
+      let resend = true;
+      const r = await guard(
+        async () => {
+          try { return await api.turn(idRef.current, { text: resend ? userText || undefined : undefined, elapsedSec: elapsedRef.current }); }
+          catch (e) { resend = e.code === 'MODEL_INVALID'; throw e; }
+        },
+        { onWait: () => { setError(''); go('model_wait'); }, onResume: () => go('ai_thinking') },
+      );
       if (r.ignored) {
         if (userText) setMessages((m) => (m.length && m[m.length - 1].role === 'candidate' && m[m.length - 1].content === userText ? m.slice(0, -1) : m));
         flash('Ambient sound detected and ignored. Your time and question are preserved.');
@@ -206,6 +220,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
     } catch (e) {
       setError(e.message);
       setCanRetry(true);
+      setModelBlocked(Boolean(e.modelDeclined));
       go('idle');
     }
   };
@@ -259,7 +274,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
         setError(`Microphone unavailable (${e.message}). You can type your answers.`);
       }
       try {
-        const r = await api.start(cfg);
+        const r = await guard(() => api.start(cfg), { onWait: () => setError('') });
         idRef.current = r.interview.id;
         const ivInfo = r.interviewer || r.message?.interviewer;
         if (ivInfo) {
@@ -310,8 +325,13 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
 
   const doEnd = async () => {
     clearTimers(); cancelSpeech(); voiceRef.current?.disarm(); go('ending'); setError('');
-    try { onFinished(await api.end(idRef.current, elapsedRef.current)); }
-    catch (e) { setError(e.message); go('idle'); }
+    try {
+      onFinished(await guard(async () => {
+        const r = await api.end(idRef.current, elapsedRef.current);
+        // After a model switch the interview is already saved as completed, so only the report is missing.
+        return !r.report && !r.note ? { ...r, report: (await api.regenerateReport(idRef.current)).report } : r;
+      }));
+    } catch (e) { setError(e.message); setModelBlocked(Boolean(e.modelDeclined)); go('idle'); }
   };
 
   const end = () => setShowEndConfirm(true);
@@ -335,7 +355,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
     sendTurn(`[CODE] (${editor.lang})\n${code.trim()}`);
   };
 
-  const isRunning = () => Boolean(idRef.current) && !['starting', 'paused', 'ending', 'failed'].includes(phaseRef.current);
+  const isRunning = () => Boolean(idRef.current) && !['starting', 'paused', 'ending', 'failed', 'model_wait'].includes(phaseRef.current);
   const vizMode = phase === 'hearing' || phase === 'listening' ? 'user' : phase === 'ai_speaking' ? 'ai' : 'idle';
   const canType = !BUSY.includes(phase) && phase !== 'paused';
   const onCodeChange = useCallback((v) => { activityRef.current = Date.now(); setCode(v); }, []);
@@ -526,7 +546,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
                   )}
                   {canRetry && (
                     <Button variant="default" className="text-xs" onClick={() => sendTurn('')}>
-                      Retry
+                      {modelBlocked ? 'Change model' : 'Retry'}
                     </Button>
                   )}
                 </div>
