@@ -24,16 +24,17 @@ export const modelPrefs = {
 };
 export const MODEL_PROBLEM_CODES = ['MODEL_LIMIT', 'MODEL_UNAVAILABLE', 'MODEL_INVALID'];
 
-async function req(path, { method = 'GET', body, form, retry = true } = {}) {
+async function req(path, { method = 'GET', body, form, retry = true, signal, headers = {} } = {}) {
   const res = await fetch(`/api${path}`, {
     method,
+    signal,
     credentials: 'include',
-    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(modelPrefs.header() ? { 'X-Model-Prefs': modelPrefs.header() } : {}) },
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(modelPrefs.header() ? { 'X-Model-Prefs': modelPrefs.header() } : {}), ...headers },
     body: form ?? (body ? JSON.stringify(body) : undefined),
   });
   let data = null;
   try { data = await res.json(); } catch { /* non-json */ }
-  if (res.status === 401 && retry && path !== '/auth/refresh' && !path.startsWith('/auth/')) { try { const refreshed = await req('/auth/refresh', { method: 'POST', retry: false }); accessToken = refreshed.accessToken; return req(path, { method, body, form, retry: false }); } catch { accessToken = null; } }
+  if (res.status === 401 && retry && path !== '/auth/refresh' && !path.startsWith('/auth/')) { try { const refreshed = await req('/auth/refresh', { method: 'POST', retry: false, signal }); accessToken = refreshed.accessToken; return req(path, { method, body, form, retry: false, signal, headers }); } catch { accessToken = null; } }
   if (!res.ok) {
     const e = new Error(data?.error || `Request failed (${res.status}). Is the server running?`);
     Object.assign(e, { status: res.status, code: data?.code, provider: data?.provider, model: data?.model, reason: data?.reason, exhausted: data?.exhausted });
@@ -43,6 +44,9 @@ async function req(path, { method = 'GET', body, form, retry = true } = {}) {
 }
 
 export const api = {
+  // Public and deliberately tiny: this is safe to call before the user is signed in
+  // and is used to wake a sleeping Render instance without touching the database.
+  health: ({ signal } = {}) => req('/health', { signal, retry: false }),
   register: (body) => req('/auth/register', { method: 'POST', body }),
   login: (body) => req('/auth/login', { method: 'POST', body }).then((r) => { accessToken = r.accessToken; return r; }),
   refresh: () => req('/auth/refresh', { method: 'POST' }).then((r) => { accessToken = r.accessToken; return r; }),
@@ -58,7 +62,7 @@ export const api = {
   usage: () => req('/usage'),
   interviews: () => req('/interviews'),
   interview: (id) => req(`/interviews/${id}`),
-  start: (cfg) => req('/interviews', { method: 'POST', body: cfg }),
+  start: (cfg, { signal, idempotencyKey } = {}) => req('/interviews', { method: 'POST', body: cfg, signal, headers: idempotencyKey ? { 'X-Interview-Start-Key': idempotencyKey } : {} }),
   turn: (id, body) => req(`/interviews/${id}/turn`, { method: 'POST', body }),
   pause: (id) => req(`/interviews/${id}/pause`, { method: 'POST' }),
   resume: (id) => req(`/interviews/${id}/resume`, { method: 'POST' }),

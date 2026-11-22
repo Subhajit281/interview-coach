@@ -20,6 +20,7 @@ import { createAuthMiddleware } from './middleware/authMiddleware.js';
 import { createAuthRouter } from './routes/auth.js';
 import { secureApiRouter } from './routes/secureApi.js';
 import { createPrismaRepo } from './services/prismaRepo.js';
+import { redactSecrets } from './utils/redact.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -37,6 +38,9 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
   if (config.trustProxy) app.set('trust proxy', config.trustProxy);
   // Unauthenticated liveness probe for the hosting platform (everything under /api requires a login).
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  // This endpoint intentionally precedes authentication. It wakes Render and proves
+  // the HTTP process is alive without querying Prisma or calling an LLM provider.
+  app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'interview-coach' }));
   app.use(cors({ origin: config.clientOrigin, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
@@ -60,7 +64,7 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
     if (err.name === 'MulterError') err.status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     let status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
     if (err.name === 'ProviderError' && status !== 503 && status !== 429) status = 502;
-    if (status >= 500) console.error(err.name, err.message);
+    if (status >= 500) console.error(err.name, redactSecrets(err.message));
     // Errors that carry a publicMessage are safe to show and tell the UI what to do (e.g. open the model picker).
     if (err.publicMessage) {
       const { code, provider, model, reason, exhausted } = err;

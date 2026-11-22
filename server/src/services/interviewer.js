@@ -176,14 +176,29 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model };
   }
 
-  async function start(cfg) {
-    const interviewId = await repo.createInterview(cfg);
+  async function start(cfg, { startRequestKey = null } = {}) {
+    const created = repo.createOrGetInterview
+      ? await repo.createOrGetInterview({ ...cfg, startRequestKey })
+      : { id: await repo.createInterview(cfg), created: true };
+    const interviewId = created.id;
+    if (!created.created) {
+      const messages = await repo.getMessages(interviewId, 1);
+      const first = messages.find((m) => m.role === 'interviewer');
+      if (first) {
+        const persona = getInterviewerPersona(interviewId);
+        return { interview: await repo.getInterview(interviewId), reply: { say: first.content, board: first.board || '', interviewer: persona }, interviewer: persona };
+      }
+      throw Object.assign(new Error('Your interview is still being initialized. Please keep this page open and retry shortly.'), { status: 409, code: 'START_IN_PROGRESS' });
+    }
     try {
       const reply = await generate(interviewId, 0);
+      // Sessions created through the idempotent production path are only active
+      // once their first interviewer message exists.
+      await repo.setStatus(interviewId, 'active');
       const persona = getInterviewerPersona(interviewId);
       return { interview: await repo.getInterview(interviewId), reply, interviewer: persona };
     } catch (e) {
-      await repo.deleteInterview(interviewId);
+      if (created.created) await repo.deleteInterview(interviewId);
       throw e;
     }
   }

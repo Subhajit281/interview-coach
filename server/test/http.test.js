@@ -33,3 +33,8 @@ test('retries network errors then throws', async () => {
   await assert.rejects(fetchWithRetry('http://x', {}, { fetchImpl, sleep: noSleep, retries: 2 }), /network error/);
   assert.equal(calls, 3);
 });
+
+test('times out an upstream provider request instead of holding the interview forever', async () => {
+  const fetchImpl = (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  await assert.rejects(fetchWithRetry('http://x', {}, { fetchImpl, sleep: noSleep, retries: 0, timeoutMs: 5 }), (e) => e instanceof ProviderError && e.status === 504);
+});

@@ -7,6 +7,7 @@ import { createEvaluator } from '../services/evaluator.js';
 import { config } from '../config/index.js';
 import { catalogFor, assertAllowedModel, parseModelPrefs, PROVIDER_LABEL } from '../data/models.js';
 import { friendly } from '../services/providerErrors.js';
+import { createStartGuard, validStartKey } from '../services/startGuard.js';
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const err = (status, message) => Object.assign(new Error(message), { status });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -19,7 +20,7 @@ async function configFor(body, repo) {
   return { mode, company, position, difficulty: b.difficulty, personality: b.personality, durationMin, style: STYLES[b.style] ? b.style : 'standard', round: COMPANIES[company].rounds.includes(b.round) ? b.round : COMPANIES[company].rounds[0], projectId };
 }
 export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
-  const r = Router(), busy = new Set();
+  const r = Router(), busy = new Set(), starts = createStartGuard();
   const repo = (req) => repoForUser(req.userId);
   const services = async (req) => { const keys = { ...(await credentials.resolve(req.userId)), models: parseModelPrefs(config, req.get('x-model-prefs')) }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
   r.get('/health', (_q, res) => res.json({ ok: true, authRequired: true }));
@@ -38,7 +39,16 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
   r.get('/stats', wrap(async (req, res) => { const current = repo(req), topics = await current.topicStats(), overview = await current.overview(); const mapped = topics.map((t) => { const [mode, ...rest] = t.topic.split(':'); return { mode, topic: rest.join(':'), attempts: t.attempts, avg: Math.round(t.avg_score * 10) / 10, hints: t.hints_total, last_seen: t.last_seen }; }); const sorted = [...mapped].sort((a, b) => a.avg - b.avg); res.json({ ...overview, weakTopics: sorted.filter((t) => t.avg < 6).slice(0, 6), strongTopics: [...sorted].reverse().filter((t) => t.avg >= 7).slice(0, 6), recentWeaknesses: await current.recentWeaknesses(3, 6) }); }));
   r.get('/interviews', wrap(async (req, res) => res.json({ interviews: await repo(req).listInterviews() })));
   r.get('/interviews/:id', wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); res.json({ interview, messages: await current.getMessages(interview.id), report: await current.getReport(interview.id) }); }));
-  r.post('/interviews', wrap(async (req, res) => { const s = await services(req), cfg = await configFor(req.body, s.repo); const result = await s.interviewer.start(cfg); res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer }); }));
+  r.post('/interviews', wrap(async (req, res) => {
+    const suppliedKey = req.get('x-interview-start-key');
+    const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
+    if (suppliedKey && !startRequestKey) throw err(400, 'Invalid interview start request key.');
+    const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
+      const s = await services(req), cfg = await configFor(req.body, s.repo);
+      return s.interviewer.start(cfg, { startRequestKey });
+    });
+    res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
+  }));
   r.post('/interviews/:id/turn', wrap(async (req, res) => { const key = `${req.userId}:${req.params.id}`; if (busy.has(key)) throw err(409, 'The previous turn is still being processed.'); busy.add(key); try { const s = await services(req); res.json(await s.interviewer.turn(req.params.id, { text: req.body?.text, elapsedSec: Number(req.body?.elapsedSec) || 0 })); } finally { busy.delete(key); } }));
   for (const [path, from, to] of [['/interviews/:id/pause', 'active', 'paused'], ['/interviews/:id/resume', 'paused', 'active']]) r.post(path, wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status !== from) throw err(409, `Interview is ${interview.status}.`); await current.setStatus(interview.id, to); res.json({ ok: true, status: to }); }));
   r.post('/interviews/:id/end', wrap(async (req, res) => { const s = await services(req), interview = await s.repo.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status === 'completed') return res.json({ interviewId: interview.id, report: await s.repo.getReport(interview.id) }); const messages = await s.repo.getMessages(interview.id); if (messages.filter((m) => m.role === 'candidate').length < 2) { await s.repo.finishInterview(interview.id, 'abandoned', req.body?.elapsedSec); return res.json({ interviewId: interview.id, report: null, note: 'Too short to evaluate (fewer than 2 answers).' }); } await s.repo.finishInterview(interview.id, 'completed', req.body?.elapsedSec); try { res.json({ interviewId: interview.id, report: await s.evaluator.evaluate(interview.id) }); } catch (e) { if (e?.publicMessage) throw e; throw err(502, 'Interview was saved, but the report could not be generated. You can retry it.'); } }));

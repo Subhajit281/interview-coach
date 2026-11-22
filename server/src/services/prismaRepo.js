@@ -9,6 +9,24 @@ export function createPrismaRepo(prisma, userId) {
     async listProjects() { return (await prisma.interviewProject.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map((p) => ({ ...p, preview: p.description.slice(0, 200), created_at: p.createdAt })); },
     async getProject(id) { return prisma.interviewProject.findFirst({ where: { id, userId } }); },
     async deleteProject(id) { return prisma.interviewProject.deleteMany({ where: own(id) }); },
+    async createOrGetInterview(c) {
+      if (c.startRequestKey) {
+        const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
+        if (existing) return { id: existing.id, created: false };
+      }
+      try {
+        const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, startRequestKey: c.startRequestKey || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60, status: c.startRequestKey ? 'initializing' : 'active' } });
+        return { id: row.id, created: true };
+      } catch (e) {
+        // A second Render worker can race the pre-read. The unique key makes it
+        // return the original row instead of creating a second interview.
+        if (c.startRequestKey && e?.code === 'P2002') {
+          const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
+          if (existing) return { id: existing.id, created: false };
+        }
+        throw e;
+      }
+    },
     async createInterview(c) {
       const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60 } });
       return row.id;

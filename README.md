@@ -60,7 +60,8 @@ See `docs/ARCHITECTURE.md` for provider limits, cost controls and design decisio
 
 ## Troubleshooting
 
-- *"Cannot reach the server"*: start it with `npm start` or `npm run dev`.
+- *"Cannot reach the server"*: start it with `npm start` or `npm run dev`. In production, the app wakes Render through the lightweight `GET /api/health` endpoint; a sleeping free instance can take up to about 50 seconds.
+- *First interview is still connecting*: the connection screen waits up to 90 seconds for the selected provider's first question. Retrying keeps the same idempotency key, so it will not create a duplicate interview session.
 - *Mic blocked*: allow microphone access for localhost in the browser; text mode still works.
 - *429 / provider errors*: the app retries and falls back across models automatically; if all fail you get a Retry button and nothing is lost.
 - *Cut off while thinking*: raise Pause tolerance in Voice settings.

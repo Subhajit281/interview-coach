@@ -141,6 +141,27 @@ test('full interview flow: start, turn, pause/resume, retry, end, report, stats'
   } finally { close(); }
 });
 
+test('health is public and duplicate in-flight starts share one interview request', async () => {
+  const db = openDb(':memory:');
+  let calls = 0;
+  const llm = { chat: async () => {
+    calls++;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    return { text: JSON.stringify(reply({ say: 'First question.', new_question: true, question_title: 'Q1' })), provider: 'fake', model: 'f' };
+  } };
+  const server = createApp({ db, llm, stt: {} }).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = () => fetch(`${base}/api/interviews`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Interview-Start-Key': 'start-key-12345678' }, body: JSON.stringify(CFG) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  try {
+    assert.equal((await fetch(`${base}/api/health`)).status, 200);
+    const [a, b] = await Promise.all([post(), post()]);
+    assert.equal(a.status, 200);
+    assert.equal(b.status, 200);
+    assert.equal(a.body.interview.id, b.body.interview.id);
+    assert.equal(calls, 1);
+  } finally { server.close(); }
+});
+
 test('too-short interviews are abandoned without a report call', async () => {
   const { call, close } = await boot([reply({ say: 'First question?' })]);
   try {

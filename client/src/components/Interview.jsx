@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
+import { createStartKey, INTERVIEW_START_TIMEOUT_MS, isAbort, isTemporaryStartError, sleep } from '../lib/connection.js';
 import { VoiceInput } from '../lib/voiceInput.js';
 import { speak, cancelSpeech, englishVoices, ttsSupported, detectGenderFromText } from '../lib/tts.js';
 import { Button, Card, Field, inputCls, Badge, EqualizerLoader, ConfirmModal, fmtTime } from './ui.jsx';
@@ -10,7 +11,7 @@ import { LANGS } from '../lib/langs.js';
 const CodeEditor = lazy(() => import('./CodeEditor.jsx'));
 
 const LABEL = {
-  starting: 'Starting interview session…',
+  starting: 'Connecting to your interviewer…',
   ai_thinking: 'Interviewer is thinking…',
   ai_speaking: 'Interviewer is speaking',
   ready: 'Mic is off. Click "Start answering" when ready to speak',
@@ -96,6 +97,8 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [hasPendingAudio, setHasPendingAudio] = useState(false);
   const [interviewerInfo, setInterviewerInfo] = useState(null);
+  const [connectionState, setConnectionState] = useState('starting');
+  const [connectionSeconds, setConnectionSeconds] = useState(0);
   const interviewerGender = useRef(null);
   const pendingAudio = useRef(null);
 
@@ -117,6 +120,10 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   const activityRef = useRef(0);
   const endAfterSpeech = useRef(false);
   const lastBoardRef = useRef('');
+  const startAbortRef = useRef(null);
+  const startInFlightRef = useRef(false);
+  const startKeyRef = useRef(createStartKey());
+  const mountedRef = useRef(true);
 
   const clearTimers = () => {
     clearTimeout(readTimer.current); readTimer.current = null;
@@ -183,6 +190,69 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
       interviewerGender.current = r.interviewer.gender;
     }
     speakReply(r.say, r.interviewer);
+  };
+
+  // The server keeps this key with the session. Retrying after a browser or proxy
+  // timeout therefore returns the original first question instead of creating one more interview.
+  const startSession = async () => {
+    if (startInFlightRef.current || idRef.current || !mountedRef.current) return;
+    startInFlightRef.current = true;
+    const controller = new AbortController();
+    startAbortRef.current?.abort();
+    startAbortRef.current = controller;
+    const deadline = Date.now() + INTERVIEW_START_TIMEOUT_MS;
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(new DOMException('Interview initialization timed out', 'AbortError')); }, INTERVIEW_START_TIMEOUT_MS);
+    const keepAwake = setInterval(() => { api.health().catch(() => {}); }, 5_000);
+    go('starting');
+    setConnectionState('starting');
+    setConnectionSeconds(0);
+    setError('');
+    setCanRetry(false);
+    setModelBlocked(false);
+    try {
+      let result;
+      while (Date.now() < deadline && !controller.signal.aborted) {
+        try {
+          result = await guard(() => api.start(cfg, { signal: controller.signal, idempotencyKey: startKeyRef.current }), { onWait: () => setError('') });
+          break;
+        } catch (e) {
+          if (!isTemporaryStartError(e) || Date.now() >= deadline || controller.signal.aborted) throw e;
+          // A 5xx can be a still-warming Render proxy or provider. The server-side key
+          // makes this safe even if the prior response was lost after it completed.
+          await sleep(Math.min(2_500, deadline - Date.now()), controller.signal);
+        }
+      }
+      if (!result) throw new DOMException('Interview initialization timed out', 'AbortError');
+      if (!mountedRef.current) return;
+      idRef.current = result.interview.id;
+      const ivInfo = result.interviewer || result.message?.interviewer;
+      if (ivInfo) {
+        setInterviewerInfo(ivInfo);
+        interviewerGender.current = ivInfo.gender;
+      }
+      setMessages([{ role: 'interviewer', content: result.message.say, board: result.message.board }]);
+      if (result.message.board) setBoard(result.message.board);
+      lastBoardRef.current = result.message.board || '';
+      lastSay.current = result.message.say;
+      setConnectionState('connected');
+      speakReply(result.message.say, ivInfo);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      const message = timedOut || isAbort(e)
+        ? 'The interviewer did not finish initializing within 90 seconds. Your request may still be completing safely; retry uses the same session request.'
+        : e.message;
+      setError(message);
+      setConnectionState('failed');
+      setCanRetry(true);
+      setModelBlocked(Boolean(e.modelDeclined));
+      go('failed');
+    } finally {
+      clearTimeout(timeout);
+      clearInterval(keepAwake);
+      if (startAbortRef.current === controller) startAbortRef.current = null;
+      startInFlightRef.current = false;
+    }
   };
 
   const flash = (msg) => {
@@ -254,6 +324,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   useEffect(() => {
     if (startedRef.current) return undefined;
     startedRef.current = true;
+    mountedRef.current = true;
     const v = new VoiceInput({
       getSettings: () => settingsRef.current,
       onLevel: (x) => { levelRef.current = x; },
@@ -273,25 +344,10 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
         setMicOk(false);
         setError(`Microphone unavailable (${e.message}). You can type your answers.`);
       }
-      try {
-        const r = await guard(() => api.start(cfg), { onWait: () => setError('') });
-        idRef.current = r.interview.id;
-        const ivInfo = r.interviewer || r.message?.interviewer;
-        if (ivInfo) {
-          setInterviewerInfo(ivInfo);
-          interviewerGender.current = ivInfo.gender;
-        }
-        setMessages([{ role: 'interviewer', content: r.message.say, board: r.message.board }]);
-        if (r.message.board) setBoard(r.message.board);
-        lastBoardRef.current = r.message.board || '';
-        lastSay.current = r.message.say;
-        speakReply(r.message.say, ivInfo);
-      } catch (e) {
-        setError(e.message);
-        go('failed');
-      }
     })();
-    return () => { clearTimers(); cancelSpeech(); v.destroy(); };
+    // Mic permission is optional; do not make it delay the Render/LLM connection.
+    startSession();
+    return () => { mountedRef.current = false; startAbortRef.current?.abort(); clearTimers(); cancelSpeech(); v.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -306,6 +362,12 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, phase]);
+
+  useEffect(() => {
+    if (connectionState !== 'starting') return undefined;
+    const timer = setInterval(() => setConnectionSeconds((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [connectionState]);
 
   useEffect(() => { localStorage.setItem('ic.settings.v3', JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem('ic.editor', JSON.stringify(editor)); }, [editor]);
@@ -397,11 +459,32 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
           <span className="font-mono text-xs text-neutral-400">
             Phase: <span className="font-medium text-emerald-400">{phase.toUpperCase()}</span>
           </span>
+          <Badge variant={connectionState === 'failed' ? 'red' : connectionState === 'connected' ? 'emerald' : 'amber'} className="font-mono text-[10px]">
+            {connectionState.toUpperCase()}
+          </Badge>
           <Button variant="danger" className="text-xs px-2.5 py-1" onClick={end} disabled={['starting', 'ending', 'failed'].includes(phase)}>
             End Session
           </Button>
         </div>
       </div>
+
+      {connectionState !== 'connected' && (
+        <div className={`rounded-lg border p-5 text-center ${connectionState === 'failed' ? 'border-red-900/60 bg-red-950/30' : 'border-[#1c3b29] bg-[#08110c]'}`}>
+          {connectionState === 'starting' ? (
+            <>
+              <EqualizerLoader size="md" label="Waking up the interviewer and preparing your interview session…" />
+              <h2 className="mt-4 text-sm font-semibold text-neutral-100">Connecting to your interviewer…</h2>
+              <p className="mt-1 text-xs text-neutral-400">This may take up to 90 seconds while the server and AI model initialize. {connectionSeconds}s elapsed.</p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-sm font-semibold text-red-100">Interview connection failed</h2>
+              <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-red-200">{error || 'The interviewer could not be initialized.'}</p>
+              <Button variant="default" className="mt-4 text-xs" onClick={startSession}>Retry connection</Button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Main Split Grid: Left = Problem & Chat, Right = Code & HUD */}
       <div className="grid gap-4 lg:grid-cols-12">
@@ -545,7 +628,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
                     </Button>
                   )}
                   {canRetry && (
-                    <Button variant="default" className="text-xs" onClick={() => sendTurn('')}>
+                    <Button variant="default" className="text-xs" onClick={phase === 'failed' ? startSession : () => sendTurn('')}>
                       {modelBlocked ? 'Change model' : 'Retry'}
                     </Button>
                   )}

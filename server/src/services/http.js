@@ -30,20 +30,34 @@ export async function fetchWithRetry(url, init, opts = {}) {
     fetchImpl = fetch,
     sleep = defaultSleep,
     label = 'request',
+    timeoutMs = 25_000,
   } = opts;
 
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const backoff = baseMs * 2 ** attempt + Math.floor(Math.random() * 100);
     let res;
+    const controller = new AbortController();
+    let timedOut = false;
+    const cancel = () => controller.abort(init?.signal?.reason || new DOMException('Aborted', 'AbortError'));
+    if (init?.signal?.aborted) cancel();
+    else init?.signal?.addEventListener('abort', cancel, { once: true });
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(new DOMException('Request timed out', 'AbortError')); }, timeoutMs);
     try {
-      res = await fetchImpl(url, init);
+      res = await fetchImpl(url, { ...init, signal: controller.signal });
     } catch (e) {
-      lastErr = new ProviderError(`${label}: network error (${e.message})`, 0);
+      lastErr = timedOut
+        ? new ProviderError(`${label}: request timed out after ${timeoutMs}ms`, 504)
+        : new ProviderError(`${label}: network error (${e.message})`, init?.signal?.aborted ? 499 : 0);
+      clearTimeout(timeout);
+      init?.signal?.removeEventListener('abort', cancel);
+      if (init?.signal?.aborted) throw lastErr;
       if (attempt === retries) throw lastErr;
       await sleep(backoff);
       continue;
     }
+    clearTimeout(timeout);
+    init?.signal?.removeEventListener('abort', cancel);
     if (res.ok) return res;
 
     const body = await res.text().catch(() => '');

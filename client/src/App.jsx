@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, modelPrefs } from './lib/api.js';
+import { BACKEND_WAKE_TIMEOUT_MS, sleep, waitForBackend } from './lib/connection.js';
 import Dashboard from './components/Dashboard.jsx';
 import Configure from './components/Configure.jsx';
 import Interview from './components/Interview.jsx';
@@ -16,40 +17,57 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [credentials, setCredentials] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
-  const [introLoading, setIntroLoading] = useState(true);
+  const [boot, setBoot] = useState({ state: 'loading', elapsedMs: 0, attempt: 0 });
 
   // In-app confirmation dialog states (no native browser alerts)
   const [leaveTarget, setLeaveTarget] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [settingsTab, setSettingsTab] = useState('keys');
 
-  // Initialize session and prefetch metadata concurrently to minimize loading wait time
+  // A first request wakes Render. Auth starts only after that request succeeds so an
+  // expired refresh call cannot make a cold server look like a logged-out user.
   useEffect(() => {
-    // Intentionally show equalizer animation page for 2.5 seconds on initial load
-    const timer = setTimeout(() => {
-      setIntroLoading(false);
-    }, 2500);
-
     let active = true;
-    api.refresh()
-      .then(() => api.me())
-      .then((r) => {
+    const controller = new AbortController();
+    const started = Date.now();
+    setAuthChecking(true);
+    setBoot((b) => ({ state: 'loading', elapsedMs: 0, attempt: b.attempt }));
+    const progress = setInterval(() => {
+      if (active) setBoot((b) => ({ ...b, elapsedMs: Date.now() - started }));
+    }, 1000);
+    (async () => {
+      try {
+        const waking = await waitForBackend(api.health, {
+          signal: controller.signal,
+          onAttempt: () => active && setBoot((b) => ({ ...b, elapsedMs: Date.now() - started })),
+        });
         if (!active) return;
-        setUser(r.user);
-        setCredentials(r.credentials);
-        if (r.credentials?.geminiConfigured || r.credentials?.groqConfigured) {
-          api.meta().then((m) => { if (active) setMeta(m); }).catch((e) => { if (active) setErr(e.message); });
+        if (!waking.ok) {
+          setBoot({ state: 'failed', elapsedMs: waking.elapsedMs, attempt: boot.attempt });
+          setAuthChecking(false);
+          return;
         }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setAuthChecking(false);
-      });
+        // Keep the transition polished, but never add more than the documented 15 s.
+        await sleep(Math.max(0, 15_000 - (Date.now() - started)), controller.signal);
+        await api.refresh().then(() => api.me()).then((r) => {
+          if (!active) return;
+          setUser(r.user);
+          setCredentials(r.credentials);
+          if (r.credentials?.geminiConfigured || r.credentials?.groqConfigured) {
+            api.meta().then((m) => { if (active) setMeta(m); }).catch((e) => { if (active) setErr(e.message); });
+          }
+        }).catch(() => {});
+        if (active) { setBoot((b) => ({ ...b, state: 'ready' })); setAuthChecking(false); }
+      } catch {
+        // Unmount/Retry aborts are intentional and should not flash an error screen.
+      } finally { clearInterval(progress); }
+    })();
     return () => {
       active = false;
-      clearTimeout(timer);
+      controller.abort();
+      clearInterval(progress);
     };
-  }, []);
+  }, [boot.attempt]);
 
   // Fetch or refresh meta when credentials change
   useEffect(() => {
@@ -78,14 +96,34 @@ export default function App() {
     setMeta(null);
   };
 
-  // Initial loading state with voice equalizer bars animation (intentionally shows for 2-3 seconds)
-  if (authChecking || introLoading) {
+  if (boot.state === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050806]">
-        <EqualizerLoader size="lg" />
+      <div className="min-h-screen flex items-center justify-center bg-[#050806] p-6 text-center">
+        <div className="max-w-md space-y-5">
+          <EqualizerLoader size="lg" label="Waking up the secure interview server…" />
+          <div className="space-y-1.5">
+            <h1 className="text-base font-semibold text-neutral-100">Preparing Interview Coach</h1>
+            <p className="text-sm leading-relaxed text-neutral-400">The server may take around 30 seconds to wake up. We’re getting everything ready for you. Please wait…</p>
+            <p className="font-mono text-xs text-emerald-400">{Math.min(Math.floor(boot.elapsedMs / 1000), Math.floor(BACKEND_WAKE_TIMEOUT_MS / 1000))}s elapsed</p>
+          </div>
+        </div>
       </div>
     );
   }
+
+  if (boot.state === 'failed') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050806] p-6 text-center">
+        <div className="max-w-md rounded-lg border border-red-900/60 bg-red-950/30 p-6 space-y-4">
+          <h1 className="text-base font-semibold text-neutral-100">Server is still waking up</h1>
+          <p className="text-sm leading-relaxed text-neutral-300">We could not reach the interview server after about 50 seconds. This is usually temporary on a free Render service.</p>
+          <button className="rounded-[6px] bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500" onClick={() => setBoot((b) => ({ ...b, state: 'loading', attempt: b.attempt + 1 }))}>Retry connection</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authChecking) return null;
 
   // Unauthenticated: show modern Auth view
   if (!user) {
@@ -195,7 +233,7 @@ export default function App() {
       <main className="mx-auto max-w-6xl p-4 sm:p-6">
         {err && (
           <div className="mb-4 rounded-[6px] border border-red-900/60 bg-red-950/40 p-3 text-xs text-red-200">
-            Cannot reach the server: {err}. Start it with <code>npm run dev</code>.
+            The server could not complete that request: {err}. Please retry; on a first production visit it may still be waking up.
           </div>
         )}
 

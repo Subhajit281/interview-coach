@@ -3,6 +3,7 @@ import multer from 'multer';
 import { MODES, POSITIONS, LEGACY_POSITIONS, DIFFICULTIES, DURATIONS, STYLES, PERSONALITIES } from '../data/modes.js';
 import { COMPANIES } from '../data/companies.js';
 import { config } from '../config/index.js';
+import { createStartGuard, validStartKey } from '../services/startGuard.js';
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const httpError = (status, message) => Object.assign(new Error(message), { status });
@@ -31,6 +32,7 @@ export function validateConfig(body, repo) {
 export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
   const r = Router();
   const busy = new Set();
+  const starts = createStartGuard();
 
   r.get('/health', (_req, res) => res.json({
     ok: true,
@@ -72,7 +74,10 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
 
   r.post('/interviews', wrap(async (req, res) => {
     const cfg = validateConfig(req.body, repo);
-    const result = await interviewer.start(cfg);
+    const suppliedKey = req.get('x-interview-start-key');
+    const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
+    if (suppliedKey && !startRequestKey) throw httpError(400, 'Invalid interview start request key');
+    const result = await starts.run(startRequestKey, () => interviewer.start(cfg));
     res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
   }));
 
