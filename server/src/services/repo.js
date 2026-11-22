@@ -28,7 +28,26 @@ export function createRepo(db) {
     finishInterview: (iid, status, elapsedSec) => q(
       `UPDATE interviews SET status = ?, elapsed_sec = ?, ended_at = datetime('now') WHERE id = ?`,
     ).run(status, Math.max(0, Math.round(elapsedSec || 0)), iid),
-    deleteInterview: (iid) => q('DELETE FROM interviews WHERE id = ?').run(iid),
+    deleteInterview: (iid) => {
+      q('DELETE FROM interviews WHERE id = ?').run(iid);
+      q('DELETE FROM topic_stats').run();
+      const reps = q('SELECT report_json FROM reports').all();
+      for (const r of reps) {
+        try {
+          const rep = JSON.parse(r.report_json);
+          for (const t of rep.topic_scores || []) {
+            if (t.topic) {
+              q(`INSERT INTO topic_stats (topic, attempts, avg_score, hints_total, last_seen) VALUES (?, 1, ?, ?, datetime('now'))
+                 ON CONFLICT(topic) DO UPDATE SET
+                   avg_score = (avg_score * attempts + excluded.avg_score) / (attempts + 1),
+                   attempts = attempts + 1,
+                   hints_total = hints_total + excluded.hints_total,
+                   last_seen = datetime('now')`).run(t.topic, t.score, t.hints_used || 0);
+            }
+          }
+        } catch {}
+      }
+    },
 
     // messages
     addMessage: (iid, role, content, board = null, meta = null) =>

@@ -193,7 +193,7 @@ test('meta exposes modes, companies and personalities', async () => {
   try {
     const m = (await call('/meta')).data;
     assert.equal(m.modes.length, 7);
-    assert.equal(m.companies.length, 10);
+    assert.equal(m.companies.length, 31);
     assert.deepEqual(m.positions, ['SDE Intern', 'SDE FTE', 'AI Engineer Intern', 'AI Engineer FTE']);
     assert.deepEqual(m.personalities.map((p) => p.id), ['real', 'strict', 'mentor']);
   } finally { close(); }

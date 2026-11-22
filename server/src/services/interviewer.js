@@ -1,7 +1,7 @@
 import { extractJson } from './llm.js';
 import { MODES } from '../data/modes.js';
 import { pickBlueprint, planQuestions } from './blueprint.js';
-import { buildSystemPrompt } from './prompts.js';
+import { buildSystemPrompt, getInterviewerPersona } from './prompts.js';
 import { pickFocus, seededRng } from './repo.js';
 import { ProviderError } from './http.js';
 import { isStrayInput } from './stray.js';
@@ -172,14 +172,16 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     }
     if (reply.hintGiven) await repo.bumpHint(interviewId);
     const { analysis, ...publicReply } = reply;
-    return { ...publicReply, strikes, provider: res.provider, model: res.model };
+    const persona = getInterviewerPersona(interviewId);
+    return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model };
   }
 
   async function start(cfg) {
     const interviewId = await repo.createInterview(cfg);
     try {
       const reply = await generate(interviewId, 0);
-      return { interview: await repo.getInterview(interviewId), reply };
+      const persona = getInterviewerPersona(interviewId);
+      return { interview: await repo.getInterview(interviewId), reply, interviewer: persona };
     } catch (e) {
       await repo.deleteInterview(interviewId);
       throw e;

@@ -3,6 +3,26 @@ import { COMPANIES } from '../data/companies.js';
 
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n)}…` : s || '');
 
+export const INTERVIEWER_PERSONAS = [
+  { name: 'David', gender: 'male' },
+  { name: 'Sarah', gender: 'female' },
+  { name: 'Michael', gender: 'male' },
+  { name: 'Rachel', gender: 'female' },
+  { name: 'Daniel', gender: 'male' },
+  { name: 'Emily', gender: 'female' },
+  { name: 'Alex', gender: 'male' },
+  { name: 'Priya', gender: 'female' },
+  { name: 'James', gender: 'male' },
+  { name: 'Elena', gender: 'female' },
+  { name: 'Marcus', gender: 'male' },
+  { name: 'Jessica', gender: 'female' },
+];
+
+export function getInterviewerPersona(interviewId = 0) {
+  const idx = Math.abs(Number(interviewId) || 0) % INTERVIEWER_PERSONAS.length;
+  return INTERVIEWER_PERSONAS[idx];
+}
+
 export function buildSystemPrompt({
   interview, focusTopics = [], askedTitles = [], weaknesses = [], project = null, elapsedSec = 0, strikes = 0, maxStrikes = 5,
   askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null,
@@ -10,6 +30,7 @@ export function buildSystemPrompt({
   const mode = MODES[interview.mode];
   const company = COMPANIES[interview.company] || COMPANIES.generic;
   const personality = PERSONALITIES[interview.personality] || PERSONALITIES.real;
+  const persona = getInterviewerPersona(interview.id);
   const elapsedMin = Math.floor(elapsedSec / 60);
   const total = interview.duration_min;
   const remaining = total - elapsedSec / 60;
@@ -33,11 +54,14 @@ export function buildSystemPrompt({
     timing,
     planLine,
     '',
+    `INTERVIEWER IDENTITY: You are ${persona.name} (${persona.gender}), a senior engineer at ${company.name}. ` +
+      `In your very first turn, introduce yourself by name in one short sentence (e.g., "Hello, I am ${persona.name}, a senior engineer at ${company.name}." or "Hi, my name is ${persona.name} and I will be leading your interview today."), ` +
+      `state the format (role, subject area, duration) in one more sentence, then pose the first question.`,
+    '',
     `PERSONALITY (${personality.label}): ${personality.prompt}`,
     '',
     'VOICE AND TONE: Speak like a senior engineer in a formal interview: composed, courteous, precise. Use complete sentences and measured acknowledgements ("Thank you.", "Understood.", "That is a reasonable starting point."). ' +
-      'No slang or filler ("cool", "awesome", "yeah", "gotcha", "okay so"), no exclamation marks, no emojis, no jokes, no sarcasm. Address the candidate directly and respectfully. ' +
-      'At the very start, introduce yourself in one sentence, state the format (role, subject area, duration) in one more, then pose the first question.',
+      'No slang or filler ("cool", "awesome", "yeah", "gotcha", "okay so"), no exclamation marks, no emojis, no jokes, no sarcasm. Address the candidate directly and respectfully.',
     '',
     'RULES:',
     '1. Ask exactly ONE question at a time, then stop and wait for the candidate.',

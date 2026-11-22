@@ -72,8 +72,8 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
 
   r.post('/interviews', wrap(async (req, res) => {
     const cfg = validateConfig(req.body, repo);
-    const { interview, reply } = await interviewer.start(cfg);
-    res.json({ interview, message: reply });
+    const result = await interviewer.start(cfg);
+    res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
   }));
 
   r.post('/interviews/:id/turn', wrap(async (req, res) => {

@@ -17,7 +17,18 @@ export function createPrismaRepo(prisma, userId) {
     async listInterviews() { const rows = await prisma.interviewSession.findMany({ where: { userId }, include: { analytics: true }, orderBy: { createdAt: 'desc' }, take: 200 }); return rows.map((r) => ({ ...session(r), overall_score: r.analytics?.overallScore ?? null })); },
     async setStatus(id, status) { return prisma.interviewSession.updateMany({ where: own(id), data: { status } }); },
     async finishInterview(id, status, elapsedSec) { return prisma.interviewSession.updateMany({ where: own(id), data: { status, durationSec: Math.max(0, Math.round(elapsedSec || 0)), endTime: new Date() } }); },
-    async deleteInterview(id) { return prisma.interviewSession.deleteMany({ where: own(id) }); },
+    async deleteInterview(id) {
+      await prisma.interviewSession.deleteMany({ where: own(id) });
+      const remaining = await prisma.interviewAnalytics.findMany({ where: { userId } });
+      await prisma.topicStat.deleteMany({ where: { userId } });
+      for (const row of remaining) {
+        const topics = row.report?.topic_scores || [];
+        for (const t of topics) {
+          if (!t.topic) continue;
+          await this.upsertTopicStat(t.topic, t.score, t.hints_used || 0);
+        }
+      }
+    },
     async addMessage(id, role, content, board = null, meta = null) {
       const row = await prisma.interviewMessage.create({ data: { sessionId: id, role, content, board: board || null, meta: meta || undefined } });
       if (role === 'candidate') { const q = await prisma.interviewQuestion.findFirst({ where: { sessionId: id }, orderBy: { sequenceNumber: 'desc' } }); await prisma.interviewResponse.create({ data: { sessionId: id, questionId: q?.id, messageId: row.id, userResponse: content } }); }

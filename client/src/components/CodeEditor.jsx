@@ -13,15 +13,16 @@ import { autoPairEdit } from '../lib/autoPair.js';
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const Ed = Editor.default || Editor;
 
-// Apply an edit through the browser's own editing command so Ctrl+Z keeps working; fall back to a plain value update.
 function applyEdit(ta, e, onChange) {
   ta.setSelectionRange(e.from, e.to);
   let ok = false;
   try {
-    if (e.insert === '' && e.from === e.to) ok = true; // pure cursor move
+    if (e.insert === '' && e.from === e.to) ok = true;
     else if (e.insert === '') ok = document.execCommand('delete');
     else ok = document.execCommand('insertText', false, e.insert);
-  } catch { ok = false; }
+  } catch {
+    ok = false;
+  }
   if (!ok) {
     onChange(ta.value.slice(0, e.from) + e.insert + ta.value.slice(e.to));
     requestAnimationFrame(() => ta.setSelectionRange(e.selStart, e.selEnd));
@@ -30,30 +31,45 @@ function applyEdit(ta, e, onChange) {
   ta.setSelectionRange(e.selStart, e.selEnd);
 }
 
-// Tab inserts 4 spaces (Shift+Tab outdents, Tab on a multi-line selection indents it); Enter keeps the indentation.
-// Brackets and quotes auto-close like VS Code, closing characters step over, Backspace removes an empty pair, Enter between {} opens a block.
-// Press Esc then Tab to move keyboard focus out of the editor.
 function CodeEditor({ value, onChange, lang, highlightOn, disabled }) {
   const grammar = languages[lang];
-  // Stable identity: the editor re-highlights only when the code, language or colour setting changes.
-  const render = useCallback((code) => (highlightOn && grammar ? highlight(code, grammar, lang) : esc(code)), [highlightOn, grammar, lang]);
-  const onKeyDown = useCallback((ev) => {
-    if (ev.nativeEvent?.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    const ta = ev.target;
-    const edit = autoPairEdit({ value: ta.value, start: ta.selectionStart, end: ta.selectionEnd, key: ev.key, lang });
-    if (!edit) return;
-    ev.preventDefault();
-    applyEdit(ta, edit, onChange);
-  }, [lang, onChange]);
+  const render = useCallback(
+    (code) => (highlightOn && grammar ? highlight(code, grammar, lang) : esc(code)),
+    [highlightOn, grammar, lang]
+  );
+
+  const onKeyDown = useCallback(
+    (ev) => {
+      if (ev.nativeEvent?.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const ta = ev.target;
+      const edit = autoPairEdit({ value: ta.value, start: ta.selectionStart, end: ta.selectionEnd, key: ev.key, lang });
+      if (!edit) return;
+      ev.preventDefault();
+      applyEdit(ta, edit, onChange);
+    },
+    [lang, onChange]
+  );
 
   return (
-    <div className="code-editor max-h-72 min-h-40 overflow-auto rounded border border-neutral-700 bg-neutral-950">
+    <div className="code-editor max-h-80 min-h-44 overflow-auto rounded-[6px] border border-[#1b2b20] bg-[#070b08] focus-within:border-emerald-500/70 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all">
       <Ed
-        value={value} onValueChange={onChange} highlight={render} disabled={disabled} onKeyDown={onKeyDown}
-        tabSize={4} insertSpaces padding={10}
-        placeholder="Paste or write your solution here…"
+        value={value}
+        onValueChange={onChange}
+        highlight={render}
+        disabled={disabled}
+        onKeyDown={onKeyDown}
+        tabSize={4}
+        insertSpaces
+        padding={12}
+        placeholder="// Write or paste your code solution here..."
         textareaClassName="code-editor-ta"
-        style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, minHeight: 160, color: '#e5e5e5' }}
+        style={{
+          fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontSize: 13,
+          minHeight: 176,
+          color: '#e2e8f0',
+          lineHeight: '1.6',
+        }}
       />
     </div>
   );
