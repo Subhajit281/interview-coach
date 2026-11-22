@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: interview-coach-api
+    runtime: node
+    plan: free
+    # prisma is a devDependency, so install dev deps explicitly (Render sets NODE_ENV=production).
+    buildCommand: npm ci --include=dev && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22.13.0
+      - key: NODE_ENV
+        value: production
+      # Number of proxy hops in front of the app (Vercel rewrite + Render) so rate limiting sees the real client IP.
+      - key: TRUST_PROXY
+        value: "2"
+      # Your Vercel URL, e.g. https://interview-coach.vercel.app (no trailing slash).
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      # Generated once by Render. Never change API_KEY_ENCRYPTION_SECRET afterwards or saved user API keys become unreadable.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: API_KEY_ENCRYPTION_SECRET
+        generateValue: true

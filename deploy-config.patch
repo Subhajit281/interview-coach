@@ -1,0 +1,117 @@
+From d0ba57eaa3204de892a08b8c57dd3a2d40cdbd67 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 10:36:45 +0000
+Subject: [PATCH] Add Render and Vercel deployment config
+
+- render.yaml: API web service with prisma generate/migrate on build
+- vercel.json: build client, proxy /api to the Render API so the strict refresh cookie stays first-party
+- /healthz liveness route and TRUST_PROXY support so login rate limiting sees real client IPs
+- document DIRECT_URL in .env.example
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01RWNurZwBmHRDo373m6miqS
+---
+ .env.example               |  2 ++
+ render.yaml                | 31 +++++++++++++++++++++++++++++++
+ server/src/app.js          |  4 ++++
+ server/src/config/index.js |  1 +
+ vercel.json                |  9 +++++++++
+ 5 files changed, 47 insertions(+)
+ create mode 100644 render.yaml
+ create mode 100644 vercel.json
+
+diff --git a/.env.example b/.env.example
+index 665e778..246816d 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,6 +1,8 @@
+ # PostgreSQL (required in all deployed environments)
+ # Connect to Postgres via the shared transaction-mode pooler (IPv4-only)
+ DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/interview_coach?schema=public"
++# Direct (non-pooled) connection, used by `prisma migrate deploy`. If you have no separate pooler, use the same value as DATABASE_URL.
++DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/interview_coach?schema=public"
+ 
+ # Generate unique, high-entropy values. Keep these server-only.
+ JWT_ACCESS_SECRET="replace-with-a-long-random-access-secret"
+diff --git a/render.yaml b/render.yaml
+new file mode 100644
+index 0000000..bed46df
+--- /dev/null
++++ b/render.yaml
+@@ -0,0 +1,31 @@
++services:
++  - type: web
++    name: interview-coach-api
++    runtime: node
++    plan: free
++    # prisma is a devDependency, so install dev deps explicitly (Render sets NODE_ENV=production).
++    buildCommand: npm ci --include=dev && npx prisma generate && npx prisma migrate deploy
++    startCommand: npm start
++    healthCheckPath: /healthz
++    envVars:
++      - key: NODE_VERSION
++        value: 22.13.0
++      - key: NODE_ENV
++        value: production
++      # Number of proxy hops in front of the app (Vercel rewrite + Render) so rate limiting sees the real client IP.
++      - key: TRUST_PROXY
++        value: "2"
++      # Your Vercel URL, e.g. https://interview-coach.vercel.app (no trailing slash).
++      - key: FRONTEND_URL
++        sync: false
++      - key: DATABASE_URL
++        sync: false
++      - key: DIRECT_URL
++        sync: false
++      # Generated once by Render. Never change API_KEY_ENCRYPTION_SECRET afterwards or saved user API keys become unreadable.
++      - key: JWT_ACCESS_SECRET
++        generateValue: true
++      - key: JWT_REFRESH_SECRET
++        generateValue: true
++      - key: API_KEY_ENCRYPTION_SECRET
++        generateValue: true
+diff --git a/server/src/app.js b/server/src/app.js
+index f96f437..82c9a4a 100644
+--- a/server/src/app.js
++++ b/server/src/app.js
+@@ -33,6 +33,10 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
+   const theStt = stt ?? createStt({ config, groq, tracker });
+ 
+   const app = express();
++  // Behind Render's load balancer (and Vercel's rewrite) req.ip would otherwise be the proxy, so the login rate limit would be shared by every user.
++  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
++  // Unauthenticated liveness probe for the hosting platform (everything under /api requires a login).
++  app.get('/healthz', (_req, res) => res.json({ ok: true }));
+   app.use(cors({ origin: config.clientOrigin, credentials: true }));
+   app.use(express.json({ limit: '1mb' }));
+   app.use(cookieParser());
+diff --git a/server/src/config/index.js b/server/src/config/index.js
+index d7416d0..10a262d 100644
+--- a/server/src/config/index.js
++++ b/server/src/config/index.js
+@@ -4,6 +4,7 @@ export const config = {
+   port: Number(env.BACKEND_PORT || env.PORT || 3001),
+   clientOrigin: env.FRONTEND_URL || env.CLIENT_ORIGIN || 'http://localhost:5173',
+   production,
++  trustProxy: /^\d+$/.test(env.TRUST_PROXY || '') ? Number(env.TRUST_PROXY) : false,
+   cookieSecure: production,
+   accessTokenSecret: env.JWT_ACCESS_SECRET || '',
+   refreshTokenSecret: env.JWT_REFRESH_SECRET || '',
+diff --git a/vercel.json b/vercel.json
+new file mode 100644
+index 0000000..eafd5ac
+--- /dev/null
++++ b/vercel.json
+@@ -0,0 +1,9 @@
++{
++  "installCommand": "npm install",
++  "buildCommand": "npm run build",
++  "outputDirectory": "client/dist",
++  "rewrites": [
++    { "source": "/api/:path*", "destination": "https://interview-coach-api.onrender.com/api/:path*" },
++    { "source": "/(.*)", "destination": "/index.html" }
++  ]
++}
+-- 
+2.43.0
+

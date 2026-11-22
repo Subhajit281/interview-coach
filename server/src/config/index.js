@@ -4,6 +4,7 @@ export const config = {
   port: Number(env.BACKEND_PORT || env.PORT || 3001),
   clientOrigin: env.FRONTEND_URL || env.CLIENT_ORIGIN || 'http://localhost:5173',
   production,
+  trustProxy: /^\d+$/.test(env.TRUST_PROXY || '') ? Number(env.TRUST_PROXY) : false,
   cookieSecure: production,
   accessTokenSecret: env.JWT_ACCESS_SECRET || '',
   refreshTokenSecret: env.JWT_REFRESH_SECRET || '',

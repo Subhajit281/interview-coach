@@ -33,6 +33,10 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
   const theStt = stt ?? createStt({ config, groq, tracker });
 
   const app = express();
+  // Behind Render's load balancer (and Vercel's rewrite) req.ip would otherwise be the proxy, so the login rate limit would be shared by every user.
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
+  // Unauthenticated liveness probe for the hosting platform (everything under /api requires a login).
+  app.get('/healthz', (_req, res) => res.json({ ok: true }));
   app.use(cors({ origin: config.clientOrigin, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
