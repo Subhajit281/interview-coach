@@ -18,7 +18,7 @@ export function isAbort(error) {
 export function isTemporaryStartError(error) {
   const status = Number(error?.status) || 0;
   // Credential/model errors are already actionable; a Render/network/provider outage is not.
-  if (['PROVIDER_AUTH', 'MODEL_INVALID', 'MODEL_UNAVAILABLE'].includes(error?.code)) return false;
+  if (['PROVIDER_AUTH', 'MODEL_INVALID', 'MODEL_UNAVAILABLE', 'HISTORY_LIMIT', 'CREDENTIAL_RESET_REQUIRED'].includes(error?.code)) return false;
   return !status || status === 408 || status === 409 || status === 429 || status >= 500;
 }
 

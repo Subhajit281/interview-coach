@@ -16,6 +16,21 @@ export function createPrismaRepo(prisma, userId) {
     model: 'automatic', durationSec: c.durationMin * 60, status: withStartKey ? 'initializing' : 'active',
   } });
   return {
+    async interviewRetention() {
+      const [total, user] = await Promise.all([
+        prisma.interviewSession.count({ where: { userId } }),
+        prisma.user.findUnique({ where: { id: userId }, select: { interviewPurgeRequired: true } }),
+      ]);
+      return { total, purgeRequired: Boolean(user?.interviewPurgeRequired) };
+    },
+    async setInterviewPurgeRequired(purgeRequired) {
+      await prisma.user.update({ where: { id: userId }, data: { interviewPurgeRequired: Boolean(purgeRequired) } });
+    },
+    async getInterviewByStartRequestKey(startRequestKey) {
+      if (!startRequestKey || !supportsStartRequestKey) return null;
+      try { return await prisma.interviewSession.findFirst({ where: { userId, startRequestKey } }); }
+      catch (e) { if (staleClientError(e)) { supportsStartRequestKey = false; return null; } throw e; }
+    },
     async addProject(name, description) { return (await prisma.interviewProject.create({ data: { userId, name, description } })).id; },
     async listProjects() { return (await prisma.interviewProject.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map((p) => ({ ...p, preview: p.description.slice(0, 200), created_at: p.createdAt })); },
     async getProject(id) { return prisma.interviewProject.findFirst({ where: { id, userId } }); },

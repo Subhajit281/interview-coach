@@ -1,0 +1,386 @@
+warning: in the working copy of 'client/src/App.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'client/src/components/Dashboard.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'client/src/components/Interview.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'client/src/lib/connection.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'prisma/schema.prisma', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/src/routes/api.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/src/routes/secureApi.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/src/services/prismaRepo.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/src/services/repo.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/client/src/App.jsx b/client/src/App.jsx
+index e179bd6..7f05d41 100644
+--- a/client/src/App.jsx
++++ b/client/src/App.jsx
+@@ -258,7 +258,7 @@ export default function App() {
+             key={view.key}
+             cfg={view.cfg}
+             meta={meta}
+-            onExit={() => setView({ name: 'configure' })}
++            onExit={() => setView({ name: 'dashboard' })}
+             onFinished={(r) => setView({ name: 'report', id: r.interviewId, note: r.note })}
+           />
+         )}
+diff --git a/client/src/components/Dashboard.jsx b/client/src/components/Dashboard.jsx
+index 4a3a474..a99037d 100644
+--- a/client/src/components/Dashboard.jsx
++++ b/client/src/components/Dashboard.jsx
+@@ -148,6 +148,7 @@ export default function Dashboard({ meta, onStart, onOpen }) {
+   const [stats, setStats] = useState(() => dashboardCache?.stats || null);
+   const [list, setList] = useState(() => dashboardCache?.list || []);
+   const [usage, setUsage] = useState(() => dashboardCache?.usage || null);
++  const [retention, setRetention] = useState(() => dashboardCache?.retention || null);
+   const [err, setErr] = useState('');
+   const [loading, setLoading] = useState(() => !dashboardCache);
+   const [deleteTarget, setDeleteTarget] = useState(null);
+@@ -156,10 +157,11 @@ export default function Dashboard({ meta, onStart, onOpen }) {
+   const load = async () => {
+     try {
+       const [s, l, u] = await Promise.all([api.stats(), api.interviews(), api.usage()]);
+-      dashboardCache = { stats: s, list: l.interviews, usage: u };
++      dashboardCache = { stats: s, list: l.interviews, usage: u, retention: l.retention };
+       setStats(s);
+       setList(l.interviews);
+       setUsage(u);
++      setRetention(l.retention);
+     } catch (e) {
+       setErr(e.message);
+     } finally {
+@@ -204,6 +206,8 @@ export default function Dashboard({ meta, onStart, onOpen }) {
+ 
+   const modeLabel = (id) => meta?.modes?.find((m) => m.id === id)?.label ?? id;
+   const companyName = (id) => meta?.companies?.find((c) => c.id === id)?.name ?? id;
++  const requiredDelete = retention?.requiredDelete || 0;
++  const historyFull = requiredDelete > 0;
+ 
+   return (
+     <div className="space-y-4">
+@@ -215,11 +219,18 @@ export default function Dashboard({ meta, onStart, onOpen }) {
+           </h1>
+           <p className="text-xs text-neutral-400 mt-0.5">Overview of your preparation progress, strengths, and interview history.</p>
+         </div>
+-        <Button variant="primary" onClick={onStart} className="self-start sm:self-auto shadow-md">
+-          Start interview
++        <Button variant="primary" onClick={onStart} disabled={historyFull} className="self-start sm:self-auto shadow-md">
++          {historyFull ? `Delete ${requiredDelete} to continue` : 'Start interview'}
+         </Button>
+       </div>
+ 
++      {historyFull && (
++        <div className="rounded-lg border border-amber-800/60 bg-amber-950/35 p-4 text-sm text-amber-100">
++          <p className="font-semibold">Interview history limit reached</p>
++          <p className="mt-1 text-xs leading-relaxed text-amber-200">To keep storage sustainable, each account may retain up to 15 interviews. Delete at least {requiredDelete} previous {requiredDelete === 1 ? 'session' : 'sessions'} below before scheduling another. Deleting a session permanently removes its report and all related transcript data.</p>
++        </div>
++      )}
++
+       {/* Metrics Grid */}
+       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+         <Stat
+diff --git a/client/src/components/Interview.jsx b/client/src/components/Interview.jsx
+index db97e34..5890654 100644
+--- a/client/src/components/Interview.jsx
++++ b/client/src/components/Interview.jsx
+@@ -99,6 +99,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+   const [interviewerInfo, setInterviewerInfo] = useState(null);
+   const [connectionState, setConnectionState] = useState('starting');
+   const [connectionSeconds, setConnectionSeconds] = useState(0);
++  const [historyLimit, setHistoryLimit] = useState(null);
+   const interviewerGender = useRef(null);
+   const pendingAudio = useRef(null);
+ 
+@@ -210,6 +211,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+     setError('');
+     setCanRetry(false);
+     setModelBlocked(false);
++    setHistoryLimit(null);
+     try {
+       let result;
+       while (Date.now() < deadline && !controller.signal.aborted) {
+@@ -244,7 +246,8 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+         : e.message;
+       setError(message);
+       setConnectionState('failed');
+-      setCanRetry(true);
++      setHistoryLimit(e.code === 'HISTORY_LIMIT' ? e : null);
++      setCanRetry(e.code !== 'HISTORY_LIMIT');
+       setModelBlocked(Boolean(e.modelDeclined));
+       go('failed');
+     } finally {
+@@ -480,7 +483,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+             <>
+               <h2 className="text-sm font-semibold text-red-100">Interview connection failed</h2>
+               <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-red-200">{error || 'The interviewer could not be initialized.'}</p>
+-              <Button variant="default" className="mt-4 text-xs" onClick={startSession}>Retry connection</Button>
++              <Button variant="default" className="mt-4 text-xs" onClick={historyLimit ? onExit : startSession}>{historyLimit ? 'Manage interview history' : 'Retry connection'}</Button>
+             </>
+           )}
+         </div>
+diff --git a/client/src/lib/connection.js b/client/src/lib/connection.js
+index 7068637..d68b428 100644
+--- a/client/src/lib/connection.js
++++ b/client/src/lib/connection.js
+@@ -18,7 +18,7 @@ export function isAbort(error) {
+ export function isTemporaryStartError(error) {
+   const status = Number(error?.status) || 0;
+   // Credential/model errors are already actionable; a Render/network/provider outage is not.
+-  if (['PROVIDER_AUTH', 'MODEL_INVALID', 'MODEL_UNAVAILABLE'].includes(error?.code)) return false;
++  if (['PROVIDER_AUTH', 'MODEL_INVALID', 'MODEL_UNAVAILABLE', 'HISTORY_LIMIT', 'CREDENTIAL_RESET_REQUIRED'].includes(error?.code)) return false;
+   return !status || status === 408 || status === 409 || status === 429 || status >= 500;
+ }
+ 
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 0c94b4f..e61dec3 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -15,6 +15,7 @@ model User {
+   passwordHash String
+   createdAt DateTime @default(now())
+   updatedAt DateTime @updatedAt
++  interviewPurgeRequired Boolean @default(false)
+   apiCredential UserApiCredential?
+   refreshTokens RefreshToken[]
+   projects InterviewProject[]
+diff --git a/server/src/routes/api.js b/server/src/routes/api.js
+index cc78fe5..410436b 100644
+--- a/server/src/routes/api.js
++++ b/server/src/routes/api.js
+@@ -4,6 +4,7 @@ import { MODES, POSITIONS, LEGACY_POSITIONS, DIFFICULTIES, DURATIONS, STYLES, PE
+ import { COMPANIES } from '../data/companies.js';
+ import { config } from '../config/index.js';
+ import { createStartGuard, validStartKey } from '../services/startGuard.js';
++import { assertCanStartInterview, recordInterviewDeletion, recordInterviewStart, retentionStatus } from '../services/interviewRetention.js';
+ 
+ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+ const httpError = (status, message) => Object.assign(new Error(message), { status });
+@@ -64,7 +65,7 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
+     });
+   });
+ 
+-  r.get('/interviews', (_req, res) => res.json({ interviews: repo.listInterviews() }));
++  r.get('/interviews', wrap(async (_req, res) => res.json({ interviews: repo.listInterviews(), retention: await retentionStatus(repo) })));
+ 
+   r.get('/interviews/:id', wrap((req, res) => {
+     const iv = repo.getInterview(Number(req.params.id));
+@@ -77,7 +78,12 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
+     const suppliedKey = req.get('x-interview-start-key');
+     const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
+     if (suppliedKey && !startRequestKey) throw httpError(400, 'Invalid interview start request key');
+-    const result = await starts.run(startRequestKey, () => interviewer.start(cfg));
++    const result = await starts.run(startRequestKey, async () => {
++      await assertCanStartInterview(repo);
++      const started = await interviewer.start(cfg);
++      await recordInterviewStart(repo);
++      return started;
++    });
+     res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
+   }));
+ 
+@@ -128,9 +134,11 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
+     res.json({ report: await evaluator.evaluate(id) });
+   }));
+ 
+-  r.delete('/interviews/:id', wrap((req, res) => {
++  r.delete('/interviews/:id', wrap(async (req, res) => {
++    const before = repo.interviewRetention();
+     repo.deleteInterview(Number(req.params.id));
+-    res.json({ ok: true });
++    await recordInterviewDeletion(repo, before);
++    res.json({ ok: true, retention: await retentionStatus(repo) });
+   }));
+ 
+   r.post('/transcribe', upload.single('audio'), wrap(async (req, res) => {
+diff --git a/server/src/routes/secureApi.js b/server/src/routes/secureApi.js
+index dac7f1c..0831bf0 100644
+--- a/server/src/routes/secureApi.js
++++ b/server/src/routes/secureApi.js
+@@ -8,6 +8,7 @@ import { config } from '../config/index.js';
+ import { catalogFor, assertAllowedModel, parseModelPrefs, PROVIDER_LABEL } from '../data/models.js';
+ import { friendly } from '../services/providerErrors.js';
+ import { createStartGuard, validStartKey } from '../services/startGuard.js';
++import { assertCanStartInterview, recordInterviewDeletion, recordInterviewStart, retentionStatus } from '../services/interviewRetention.js';
+ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+ const err = (status, message) => Object.assign(new Error(message), { status });
+ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+@@ -37,7 +38,7 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
+   }));
+   r.get('/usage', (_q, res) => res.json(tracker.snapshot()));
+   r.get('/stats', wrap(async (req, res) => { const current = repo(req), topics = await current.topicStats(), overview = await current.overview(); const mapped = topics.map((t) => { const [mode, ...rest] = t.topic.split(':'); return { mode, topic: rest.join(':'), attempts: t.attempts, avg: Math.round(t.avg_score * 10) / 10, hints: t.hints_total, last_seen: t.last_seen }; }); const sorted = [...mapped].sort((a, b) => a.avg - b.avg); res.json({ ...overview, weakTopics: sorted.filter((t) => t.avg < 6).slice(0, 6), strongTopics: [...sorted].reverse().filter((t) => t.avg >= 7).slice(0, 6), recentWeaknesses: await current.recentWeaknesses(3, 6) }); }));
+-  r.get('/interviews', wrap(async (req, res) => res.json({ interviews: await repo(req).listInterviews() })));
++  r.get('/interviews', wrap(async (req, res) => { const current = repo(req); res.json({ interviews: await current.listInterviews(), retention: await retentionStatus(current) }); }));
+   r.get('/interviews/:id', wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); res.json({ interview, messages: await current.getMessages(interview.id), report: await current.getReport(interview.id) }); }));
+   r.post('/interviews', wrap(async (req, res) => {
+     const suppliedKey = req.get('x-interview-start-key');
+@@ -53,7 +54,12 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
+     try {
+       const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
+         const s = await services(req), cfg = await configFor(req.body, s.repo);
+-        return s.interviewer.start(cfg, { startRequestKey, signal: controller.signal });
++        // A lost response can retry a completed idempotent request even after
++        // the history cap was reached; it must return that same session.
++        if (!(await s.repo.getInterviewByStartRequestKey?.(startRequestKey))) await assertCanStartInterview(s.repo);
++        const started = await s.interviewer.start(cfg, { startRequestKey, signal: controller.signal });
++        await recordInterviewStart(s.repo);
++        return started;
+       });
+       res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
+     } catch (e) {
+@@ -74,7 +80,7 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
+   for (const [path, from, to] of [['/interviews/:id/pause', 'active', 'paused'], ['/interviews/:id/resume', 'paused', 'active']]) r.post(path, wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status !== from) throw err(409, `Interview is ${interview.status}.`); await current.setStatus(interview.id, to); res.json({ ok: true, status: to }); }));
+   r.post('/interviews/:id/end', wrap(async (req, res) => { const s = await services(req), interview = await s.repo.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status === 'completed') return res.json({ interviewId: interview.id, report: await s.repo.getReport(interview.id) }); const messages = await s.repo.getMessages(interview.id); if (messages.filter((m) => m.role === 'candidate').length < 2) { await s.repo.finishInterview(interview.id, 'abandoned', req.body?.elapsedSec); return res.json({ interviewId: interview.id, report: null, note: 'Too short to evaluate (fewer than 2 answers).' }); } await s.repo.finishInterview(interview.id, 'completed', req.body?.elapsedSec); try { res.json({ interviewId: interview.id, report: await s.evaluator.evaluate(interview.id) }); } catch (e) { if (e?.publicMessage) throw e; throw err(502, 'Interview was saved, but the report could not be generated. You can retry it.'); } }));
+   r.post('/interviews/:id/report', wrap(async (req, res) => { const s = await services(req); if (!(await s.repo.getInterview(req.params.id))) throw err(404, 'Interview not found.'); res.json({ report: await s.evaluator.evaluate(req.params.id) }); }));
+-  r.delete('/interviews/:id', wrap(async (req, res) => { await repo(req).deleteInterview(req.params.id); res.json({ ok: true }); }));
++  r.delete('/interviews/:id', wrap(async (req, res) => { const current = repo(req), before = await current.interviewRetention(); await current.deleteInterview(req.params.id); await recordInterviewDeletion(current, before); res.json({ ok: true, retention: await retentionStatus(current) }); }));
+   r.post('/transcribe', upload.single('audio'), wrap(async (req, res) => { if (!req.file) throw err(400, 'No audio received.'); const keys = await credentials.resolve(req.userId); if (!keys.groqKey) throw err(428, 'Configure a Groq key to use voice transcription.'); res.json({ text: await stt.transcribe({ buffer: req.file.buffer, mime: req.file.mimetype || 'audio/webm', durationSec: Number(req.body?.duration) || 0, voicedSec: req.body?.voiced === undefined ? null : Number(req.body.voiced), apiKey: keys.groqKey }) }); }));
+   r.get('/projects', wrap(async (req, res) => res.json({ projects: await repo(req).listProjects() })));
+   r.post('/projects', wrap(async (req, res) => { const name = String(req.body?.name || '').trim().slice(0, 120), description = String(req.body?.description || '').trim().slice(0, 20000); if (!name || description.length < 30) throw err(400, 'Give the project a name and a description of at least 30 characters.'); res.json({ id: await repo(req).addProject(name, description) }); }));
+diff --git a/server/src/services/prismaRepo.js b/server/src/services/prismaRepo.js
+index 7e18579..7f517e7 100644
+--- a/server/src/services/prismaRepo.js
++++ b/server/src/services/prismaRepo.js
+@@ -16,6 +16,21 @@ export function createPrismaRepo(prisma, userId) {
+     model: 'automatic', durationSec: c.durationMin * 60, status: withStartKey ? 'initializing' : 'active',
+   } });
+   return {
++    async interviewRetention() {
++      const [total, user] = await Promise.all([
++        prisma.interviewSession.count({ where: { userId } }),
++        prisma.user.findUnique({ where: { id: userId }, select: { interviewPurgeRequired: true } }),
++      ]);
++      return { total, purgeRequired: Boolean(user?.interviewPurgeRequired) };
++    },
++    async setInterviewPurgeRequired(purgeRequired) {
++      await prisma.user.update({ where: { id: userId }, data: { interviewPurgeRequired: Boolean(purgeRequired) } });
++    },
++    async getInterviewByStartRequestKey(startRequestKey) {
++      if (!startRequestKey || !supportsStartRequestKey) return null;
++      try { return await prisma.interviewSession.findFirst({ where: { userId, startRequestKey } }); }
++      catch (e) { if (staleClientError(e)) { supportsStartRequestKey = false; return null; } throw e; }
++    },
+     async addProject(name, description) { return (await prisma.interviewProject.create({ data: { userId, name, description } })).id; },
+     async listProjects() { return (await prisma.interviewProject.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map((p) => ({ ...p, preview: p.description.slice(0, 200), created_at: p.createdAt })); },
+     async getProject(id) { return prisma.interviewProject.findFirst({ where: { id, userId } }); },
+diff --git a/server/src/services/repo.js b/server/src/services/repo.js
+index 15d75a2..70d2a3f 100644
+--- a/server/src/services/repo.js
++++ b/server/src/services/repo.js
+@@ -7,8 +7,11 @@ export function createRepo(db) {
+     return st;
+   };
+   const id = (r) => Number(r.lastInsertRowid);
++  let interviewPurgeRequired = false;
+ 
+   return {
++    interviewRetention: () => ({ total: q('SELECT COUNT(*) AS total FROM interviews').get().total, purgeRequired: interviewPurgeRequired }),
++    setInterviewPurgeRequired: (value) => { interviewPurgeRequired = Boolean(value); },
+     // projects
+     addProject: (name, description) => id(q('INSERT INTO projects (name, description) VALUES (?, ?)').run(name, description)),
+     listProjects: () => q('SELECT id, name, substr(description, 1, 200) AS preview, created_at FROM projects ORDER BY id DESC').all(),
+@@ -155,4 +158,4 @@ export function seededRng(seed) {
+     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+   };
+-}
+\ No newline at end of file
++}
+warning: in the working copy of 'prisma/migrations/20261122020000_interview_retention_guard/migration.sql', LF will be replaced by CRLF the next time Git touches it
+diff --git a/prisma/migrations/20261122020000_interview_retention_guard/migration.sql b/prisma/migrations/20261122020000_interview_retention_guard/migration.sql
+new file mode 100644
+index 0000000..b04781e
+--- /dev/null
++++ b/prisma/migrations/20261122020000_interview_retention_guard/migration.sql
+@@ -0,0 +1 @@
++ALTER TABLE "User" ADD COLUMN "interviewPurgeRequired" BOOLEAN NOT NULL DEFAULT false;
+warning: in the working copy of 'server/src/services/interviewRetention.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/server/src/services/interviewRetention.js b/server/src/services/interviewRetention.js
+new file mode 100644
+index 0000000..a2b79a0
+--- /dev/null
++++ b/server/src/services/interviewRetention.js
+@@ -0,0 +1,47 @@
++// Storage guardrail: a user may retain up to 15 sessions. Once they reach the
++// cap they must purge five, returning to ten retained sessions, before starting
++// another. This bounds transcript/report storage without deleting user data
++// automatically.
++export const MAX_RETAINED_INTERVIEWS = 15;
++export const PURGE_TO_RETAIN = 10;
++
++const limitError = (total) => {
++  const remaining = Math.max(0, total - PURGE_TO_RETAIN);
++  return Object.assign(new Error(`Your interview history is full (${total}/${MAX_RETAINED_INTERVIEWS}). Delete ${remaining} previous ${remaining === 1 ? 'interview' : 'interviews'} to continue.`), {
++    status: 409,
++    code: 'HISTORY_LIMIT',
++    publicMessage: `Your interview history is full. Delete ${remaining} previous ${remaining === 1 ? 'interview' : 'interviews'} to continue. Deleting a session permanently removes its transcript and report.`,
++    total,
++    requiredDelete: remaining,
++  });
++};
++
++export async function retentionStatus(repo) {
++  const state = await repo.interviewRetention();
++  const locked = Boolean(state.purgeRequired) || state.total >= MAX_RETAINED_INTERVIEWS;
++  return { total: state.total, max: MAX_RETAINED_INTERVIEWS, requiredDelete: locked ? Math.max(0, state.total - PURGE_TO_RETAIN) : 0 };
++}
++
++export async function assertCanStartInterview(repo) {
++  const state = await repo.interviewRetention();
++  if (!state.purgeRequired && state.total < MAX_RETAINED_INTERVIEWS) return;
++  const requiredDelete = Math.max(0, state.total - PURGE_TO_RETAIN);
++  if (requiredDelete === 0) {
++    await repo.setInterviewPurgeRequired(false);
++    return;
++  }
++  await repo.setInterviewPurgeRequired(true);
++  throw limitError(state.total);
++}
++
++export async function recordInterviewStart(repo) {
++  const state = await repo.interviewRetention();
++  if (state.total >= MAX_RETAINED_INTERVIEWS) await repo.setInterviewPurgeRequired(true);
++}
++
++export async function recordInterviewDeletion(repo, before) {
++  const after = await repo.interviewRetention();
++  if (before.purgeRequired || before.total >= MAX_RETAINED_INTERVIEWS) {
++    await repo.setInterviewPurgeRequired(after.total > PURGE_TO_RETAIN);
++  }
++}
+warning: in the working copy of 'server/test/interviewRetention.test.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/server/test/interviewRetention.test.js b/server/test/interviewRetention.test.js
+new file mode 100644
+index 0000000..a098858
+--- /dev/null
++++ b/server/test/interviewRetention.test.js
+@@ -0,0 +1,33 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { assertCanStartInterview, recordInterviewDeletion, recordInterviewStart, retentionStatus } from '../src/services/interviewRetention.js';
++
++function repo(total = 0, purgeRequired = false) {
++  return {
++    total, purgeRequired,
++    async interviewRetention() { return { total: this.total, purgeRequired: this.purgeRequired }; },
++    async setInterviewPurgeRequired(value) { this.purgeRequired = value; },
++  };
++}
++
++test('a fifteenth retained interview starts the five-deletion retention lock', async () => {
++  const r = repo(14);
++  await assertCanStartInterview(r);
++  r.total++;
++  await recordInterviewStart(r);
++  assert.equal(r.purgeRequired, true);
++  assert.deepEqual(await retentionStatus(r), { total: 15, max: 15, requiredDelete: 5 });
++});
++
++test('the history lock requires deleting five sessions before another start', async () => {
++  const r = repo(15, true);
++  await assert.rejects(assertCanStartInterview(r), (e) => e.code === 'HISTORY_LIMIT' && e.requiredDelete === 5);
++  while (r.total > 10) {
++    const before = await r.interviewRetention();
++    r.total--;
++    await recordInterviewDeletion(r, before);
++  }
++  assert.equal(r.purgeRequired, false);
++  await assertCanStartInterview(r);
++  assert.deepEqual(await retentionStatus(r), { total: 10, max: 15, requiredDelete: 0 });
++});
+

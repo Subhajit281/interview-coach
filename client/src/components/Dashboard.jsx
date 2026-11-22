@@ -148,6 +148,7 @@ export default function Dashboard({ meta, onStart, onOpen }) {
   const [stats, setStats] = useState(() => dashboardCache?.stats || null);
   const [list, setList] = useState(() => dashboardCache?.list || []);
   const [usage, setUsage] = useState(() => dashboardCache?.usage || null);
+  const [retention, setRetention] = useState(() => dashboardCache?.retention || null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(() => !dashboardCache);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -156,10 +157,11 @@ export default function Dashboard({ meta, onStart, onOpen }) {
   const load = async () => {
     try {
       const [s, l, u] = await Promise.all([api.stats(), api.interviews(), api.usage()]);
-      dashboardCache = { stats: s, list: l.interviews, usage: u };
+      dashboardCache = { stats: s, list: l.interviews, usage: u, retention: l.retention };
       setStats(s);
       setList(l.interviews);
       setUsage(u);
+      setRetention(l.retention);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -204,6 +206,8 @@ export default function Dashboard({ meta, onStart, onOpen }) {
 
   const modeLabel = (id) => meta?.modes?.find((m) => m.id === id)?.label ?? id;
   const companyName = (id) => meta?.companies?.find((c) => c.id === id)?.name ?? id;
+  const requiredDelete = retention?.requiredDelete || 0;
+  const historyFull = requiredDelete > 0;
 
   return (
     <div className="space-y-4">
@@ -215,10 +219,17 @@ export default function Dashboard({ meta, onStart, onOpen }) {
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">Overview of your preparation progress, strengths, and interview history.</p>
         </div>
-        <Button variant="primary" onClick={onStart} className="self-start sm:self-auto shadow-md">
-          Start interview
+        <Button variant="primary" onClick={onStart} disabled={historyFull} className="self-start sm:self-auto shadow-md">
+          {historyFull ? `Delete ${requiredDelete} to continue` : 'Start interview'}
         </Button>
       </div>
+
+      {historyFull && (
+        <div className="rounded-lg border border-amber-800/60 bg-amber-950/35 p-4 text-sm text-amber-100">
+          <p className="font-semibold">Interview history limit reached</p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-200">To keep storage sustainable, each account may retain up to 15 interviews. Delete at least {requiredDelete} previous {requiredDelete === 1 ? 'session' : 'sessions'} below before scheduling another. Deleting a session permanently removes its report and all related transcript data.</p>
+        </div>
+      )}
 
       {/* Metrics Grid */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

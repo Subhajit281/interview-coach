@@ -258,7 +258,7 @@ export default function App() {
             key={view.key}
             cfg={view.cfg}
             meta={meta}
-            onExit={() => setView({ name: 'configure' })}
+            onExit={() => setView({ name: 'dashboard' })}
             onFinished={(r) => setView({ name: 'report', id: r.interviewId, note: r.note })}
           />
         )}

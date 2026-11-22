@@ -4,6 +4,17 @@ import { createHash, randomBytes } from 'node:crypto';
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const digest = (token) => createHash('sha256').update(token).digest('hex');
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+// This is deliberately enforced on the server (rather than only hiding the
+// registration button), so a direct API call cannot create user number 26.
+export const MAX_REGISTERED_USERS = 25;
+const registrationLimitReached = () => Object.assign(
+  fail(`Registration is closed: the ${MAX_REGISTERED_USERS}-user limit has been reached.`, 403),
+  {
+    code: 'REGISTRATION_LIMIT_REACHED',
+    publicMessage: `The ${MAX_REGISTERED_USERS}-user limit has been reached. No more registrations are available right now.`,
+  },
+);
+const isTransactionConflict = (error) => error?.code === 'P2034';
 
 export function createAuthService({ prisma, config }) {
   const accessToken = (user) => jwt.sign({ sub: user.id, email: user.email }, config.accessTokenSecret, { expiresIn: config.accessTokenTtl });
@@ -19,8 +30,23 @@ export function createAuthService({ prisma, config }) {
       if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) throw fail('Enter a valid email address.');
       if (typeof password !== 'string' || password.length < 12) throw fail('Use a password with at least 12 characters.');
       if (password !== confirmPassword) throw fail('Passwords do not match.');
-      if (await prisma.user.findUnique({ where: { email: cleanEmail }, select: { id: true } })) throw fail('An account with that email already exists.', 409);
-      return prisma.user.create({ data: { name: cleanName, email: cleanEmail, passwordHash: await bcrypt.hash(password, 12) }, select: { id: true, name: true, email: true } });
+      const createUser = async (tx) => {
+        if (await tx.user.findUnique({ where: { email: cleanEmail }, select: { id: true } })) throw fail('An account with that email already exists.', 409);
+        if (await tx.user.count() >= MAX_REGISTERED_USERS) throw registrationLimitReached();
+        return tx.user.create({ data: { name: cleanName, email: cleanEmail, passwordHash: await bcrypt.hash(password, 12) }, select: { id: true, name: true, email: true } });
+      };
+
+      // Serializable transactions prevent two registrations that arrive at the
+      // same time from both seeing slot 25 as available. PostgreSQL may abort
+      // one competing transaction, so retry that safe, transient conflict.
+      if (!prisma.$transaction) return createUser(prisma);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await prisma.$transaction(createUser, { isolationLevel: 'Serializable' });
+        } catch (error) {
+          if (!isTransactionConflict(error) || attempt === 2) throw error;
+        }
+      }
     },
     async login({ email, password }) {
       const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });

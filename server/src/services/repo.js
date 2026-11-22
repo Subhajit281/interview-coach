@@ -7,8 +7,11 @@ export function createRepo(db) {
     return st;
   };
   const id = (r) => Number(r.lastInsertRowid);
+  let interviewPurgeRequired = false;
 
   return {
+    interviewRetention: () => ({ total: q('SELECT COUNT(*) AS total FROM interviews').get().total, purgeRequired: interviewPurgeRequired }),
+    setInterviewPurgeRequired: (value) => { interviewPurgeRequired = Boolean(value); },
     // projects
     addProject: (name, description) => id(q('INSERT INTO projects (name, description) VALUES (?, ?)').run(name, description)),
     listProjects: () => q('SELECT id, name, substr(description, 1, 200) AS preview, created_at FROM projects ORDER BY id DESC').all(),

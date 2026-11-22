@@ -1,0 +1,112 @@
+diff --git a/README.md b/README.md
+index a776eb1..80fcbc3 100644
+--- a/README.md
++++ b/README.md
+@@ -52,6 +52,7 @@ See `docs/ARCHITECTURE.md` for provider limits, cost controls and design decisio
+ 
+ ## Limits and honest notes
+ 
++- Registration is capped at 25 total accounts. Once full, new sign-ups receive a clear message; existing accounts can still sign in and use the app.
+ - Free-tier limits change. Groq's published Whisper free limits at build time: 20 requests/min, 2,000/day, 28,800 audio seconds/day. Check your console. The dashboard shows local usage and Groq's rate-limit headers.
+ - Talk-over interruption is off by default: speaker audio can re-trigger the mic. Turn it on in Voice settings if you use headphones. The Interrupt button always works.
+ - Voice quality is whatever your browser provides. Pick a better voice in Voice settings (Edge "Natural" voices sound best).
+diff --git a/server/src/services/authService.js b/server/src/services/authService.js
+index e7bbb53..cc41ef8 100644
+--- a/server/src/services/authService.js
++++ b/server/src/services/authService.js
+@@ -4,6 +4,17 @@ import { createHash, randomBytes } from 'node:crypto';
+ const fail = (message, status = 400) => Object.assign(new Error(message), { status });
+ const digest = (token) => createHash('sha256').update(token).digest('hex');
+ const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
++// This is deliberately enforced on the server (rather than only hiding the
++// registration button), so a direct API call cannot create user number 26.
++export const MAX_REGISTERED_USERS = 25;
++const registrationLimitReached = () => Object.assign(
++  fail(`Registration is closed: the ${MAX_REGISTERED_USERS}-user limit has been reached.`, 403),
++  {
++    code: 'REGISTRATION_LIMIT_REACHED',
++    publicMessage: `The ${MAX_REGISTERED_USERS}-user limit has been reached. No more registrations are available right now.`,
++  },
++);
++const isTransactionConflict = (error) => error?.code === 'P2034';
+ 
+ export function createAuthService({ prisma, config }) {
+   const accessToken = (user) => jwt.sign({ sub: user.id, email: user.email }, config.accessTokenSecret, { expiresIn: config.accessTokenTtl });
+@@ -19,8 +30,23 @@ export function createAuthService({ prisma, config }) {
+       if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) throw fail('Enter a valid email address.');
+       if (typeof password !== 'string' || password.length < 12) throw fail('Use a password with at least 12 characters.');
+       if (password !== confirmPassword) throw fail('Passwords do not match.');
+-      if (await prisma.user.findUnique({ where: { email: cleanEmail }, select: { id: true } })) throw fail('An account with that email already exists.', 409);
+-      return prisma.user.create({ data: { name: cleanName, email: cleanEmail, passwordHash: await bcrypt.hash(password, 12) }, select: { id: true, name: true, email: true } });
++      const createUser = async (tx) => {
++        if (await tx.user.findUnique({ where: { email: cleanEmail }, select: { id: true } })) throw fail('An account with that email already exists.', 409);
++        if (await tx.user.count() >= MAX_REGISTERED_USERS) throw registrationLimitReached();
++        return tx.user.create({ data: { name: cleanName, email: cleanEmail, passwordHash: await bcrypt.hash(password, 12) }, select: { id: true, name: true, email: true } });
++      };
++
++      // Serializable transactions prevent two registrations that arrive at the
++      // same time from both seeing slot 25 as available. PostgreSQL may abort
++      // one competing transaction, so retry that safe, transient conflict.
++      if (!prisma.$transaction) return createUser(prisma);
++      for (let attempt = 0; attempt < 3; attempt += 1) {
++        try {
++          return await prisma.$transaction(createUser, { isolationLevel: 'Serializable' });
++        } catch (error) {
++          if (!isTransactionConflict(error) || attempt === 2) throw error;
++        }
++      }
+     },
+     async login({ email, password }) {
+       const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
+diff --git a/server/test/authService.test.js b/server/test/authService.test.js
+new file mode 100644
+index 0000000..6b6b1ea
+--- /dev/null
++++ b/server/test/authService.test.js
+@@ -0,0 +1,46 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createAuthService, MAX_REGISTERED_USERS } from '../src/services/authService.js';
++
++const config = {
++  accessTokenSecret: 'test-access-secret',
++  accessTokenTtl: '15m',
++  refreshTokenDays: 7,
++};
++
++function prismaWithUserCount(total) {
++  let createCalls = 0;
++  const tx = {
++    user: {
++      findUnique: async () => null,
++      count: async () => total,
++      create: async () => { createCalls += 1; return { id: 'new-user', name: 'New User', email: 'new@example.com' }; },
++    },
++  };
++  return {
++    prisma: { ...tx, $transaction: async (work) => work(tx) },
++    getCreateCalls: () => createCalls,
++  };
++}
++
++test('registration refuses user 26 with a safe public limit message', async () => {
++  const fake = prismaWithUserCount(MAX_REGISTERED_USERS);
++  const auth = createAuthService({ prisma: fake.prisma, config });
++
++  await assert.rejects(
++    auth.register({ name: 'New User', email: 'new@example.com', password: 'a-long-test-password', confirmPassword: 'a-long-test-password' }),
++    (error) => error.status === 403
++      && error.code === 'REGISTRATION_LIMIT_REACHED'
++      && error.publicMessage === 'The 25-user limit has been reached. No more registrations are available right now.',
++  );
++  assert.equal(fake.getCreateCalls(), 0);
++});
++
++test('registration is allowed while fewer than 25 users exist', async () => {
++  const fake = prismaWithUserCount(MAX_REGISTERED_USERS - 1);
++  const auth = createAuthService({ prisma: fake.prisma, config });
++  const user = await auth.register({ name: 'New User', email: 'new@example.com', password: 'a-long-test-password', confirmPassword: 'a-long-test-password' });
++
++  assert.equal(user.id, 'new-user');
++  assert.equal(fake.getCreateCalls(), 1);
++});

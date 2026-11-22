@@ -4,6 +4,7 @@ import { MODES, POSITIONS, LEGACY_POSITIONS, DIFFICULTIES, DURATIONS, STYLES, PE
 import { COMPANIES } from '../data/companies.js';
 import { config } from '../config/index.js';
 import { createStartGuard, validStartKey } from '../services/startGuard.js';
+import { assertCanStartInterview, recordInterviewDeletion, recordInterviewStart, retentionStatus } from '../services/interviewRetention.js';
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const httpError = (status, message) => Object.assign(new Error(message), { status });
@@ -64,7 +65,7 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
     });
   });
 
-  r.get('/interviews', (_req, res) => res.json({ interviews: repo.listInterviews() }));
+  r.get('/interviews', wrap(async (_req, res) => res.json({ interviews: repo.listInterviews(), retention: await retentionStatus(repo) })));
 
   r.get('/interviews/:id', wrap((req, res) => {
     const iv = repo.getInterview(Number(req.params.id));
@@ -77,7 +78,12 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
     const suppliedKey = req.get('x-interview-start-key');
     const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
     if (suppliedKey && !startRequestKey) throw httpError(400, 'Invalid interview start request key');
-    const result = await starts.run(startRequestKey, () => interviewer.start(cfg));
+    const result = await starts.run(startRequestKey, async () => {
+      await assertCanStartInterview(repo);
+      const started = await interviewer.start(cfg);
+      await recordInterviewStart(repo);
+      return started;
+    });
     res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
   }));
 
@@ -128,9 +134,11 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
     res.json({ report: await evaluator.evaluate(id) });
   }));
 
-  r.delete('/interviews/:id', wrap((req, res) => {
+  r.delete('/interviews/:id', wrap(async (req, res) => {
+    const before = repo.interviewRetention();
     repo.deleteInterview(Number(req.params.id));
-    res.json({ ok: true });
+    await recordInterviewDeletion(repo, before);
+    res.json({ ok: true, retention: await retentionStatus(repo) });
   }));
 
   r.post('/transcribe', upload.single('audio'), wrap(async (req, res) => {

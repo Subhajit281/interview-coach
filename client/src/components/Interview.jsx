@@ -99,6 +99,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   const [interviewerInfo, setInterviewerInfo] = useState(null);
   const [connectionState, setConnectionState] = useState('starting');
   const [connectionSeconds, setConnectionSeconds] = useState(0);
+  const [historyLimit, setHistoryLimit] = useState(null);
   const interviewerGender = useRef(null);
   const pendingAudio = useRef(null);
 
@@ -210,6 +211,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
     setError('');
     setCanRetry(false);
     setModelBlocked(false);
+    setHistoryLimit(null);
     try {
       let result;
       while (Date.now() < deadline && !controller.signal.aborted) {
@@ -244,7 +246,8 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
         : e.message;
       setError(message);
       setConnectionState('failed');
-      setCanRetry(true);
+      setHistoryLimit(e.code === 'HISTORY_LIMIT' ? e : null);
+      setCanRetry(e.code !== 'HISTORY_LIMIT');
       setModelBlocked(Boolean(e.modelDeclined));
       go('failed');
     } finally {
@@ -480,7 +483,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
             <>
               <h2 className="text-sm font-semibold text-red-100">Interview connection failed</h2>
               <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-red-200">{error || 'The interviewer could not be initialized.'}</p>
-              <Button variant="default" className="mt-4 text-xs" onClick={startSession}>Retry connection</Button>
+              <Button variant="default" className="mt-4 text-xs" onClick={historyLimit ? onExit : startSession}>{historyLimit ? 'Manage interview history' : 'Retry connection'}</Button>
             </>
           )}
         </div>

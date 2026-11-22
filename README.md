@@ -52,6 +52,7 @@ See `docs/ARCHITECTURE.md` for provider limits, cost controls and design decisio
 
 ## Limits and honest notes
 
+- Registration is capped at 25 total accounts. Once full, new sign-ups receive a clear message; existing accounts can still sign in and use the app.
 - Free-tier limits change. Groq's published Whisper free limits at build time: 20 requests/min, 2,000/day, 28,800 audio seconds/day. Check your console. The dashboard shows local usage and Groq's rate-limit headers.
 - Talk-over interruption is off by default: speaker audio can re-trigger the mic. Turn it on in Voice settings if you use headphones. The Interrupt button always works.
 - Voice quality is whatever your browser provides. Pick a better voice in Voice settings (Edge "Natural" voices sound best).
