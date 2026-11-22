@@ -18,7 +18,7 @@ export default function ApiKeys({ status = {}, onSaved, settings = false }) {
       const r = await api.saveCredentials({
         ...(geminiKey ? { geminiKey } : {}),
         ...(groqKey ? { groqKey } : {}),
-        ...(settings ? { currentPassword } : {}),
+        ...(requiresPassword ? { currentPassword } : {}),
       });
       setGemini('');
       setGroq('');
@@ -44,6 +44,7 @@ export default function ApiKeys({ status = {}, onSaved, settings = false }) {
 
   const isGeminiOk = Boolean(status?.geminiConfigured);
   const isGroqOk = Boolean(status?.groqConfigured);
+  const requiresPassword = settings || Boolean(status?.credentialResetRequired);
 
   return (
     <div className="mx-auto max-w-xl space-y-4">
@@ -51,6 +52,12 @@ export default function ApiKeys({ status = {}, onSaved, settings = false }) {
         <p className="text-sm text-neutral-400 leading-relaxed mb-4">
           Provide your API keys to power the interview simulation. Keys are validated against the provider and encrypted using AES-256-GCM on the server.
         </p>
+
+        {status?.credentialResetRequired && (
+          <div className="mb-4 rounded-[6px] border border-amber-800/60 bg-amber-950/35 p-3 text-xs leading-relaxed text-amber-200">
+            A server security-key change made one or more previously saved provider keys unreadable. Re-enter the affected key below to restore interviews.
+          </div>
+        )}
 
         {/* Current status without green/amber dots */}
         <div className="mb-5 flex flex-wrap items-center gap-4 rounded-[6px] border border-[#16231a] bg-[#070b08] p-3 text-xs">
@@ -122,15 +129,15 @@ export default function ApiKeys({ status = {}, onSaved, settings = false }) {
             />
           </Field>
 
-          {settings && (
-            <Field label="Current password" hint="Required to authorize credential updates">
+          {requiresPassword && (
+            <Field label="Current password" hint="Required to authorize this credential update">
               <input
                 className={inputCls}
                 type="password"
                 placeholder="Enter your account password"
                 value={currentPassword}
                 onChange={(e) => setPassword(e.target.value)}
-                required
+                required={requiresPassword}
               />
             </Field>
           )}

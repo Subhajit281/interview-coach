@@ -145,12 +145,12 @@ export default function App() {
   }
 
   // First-time onboarding: prompt to configure API keys
-  if (!credentials || (!credentials.geminiConfigured && !credentials.groqConfigured)) {
+  if (!credentials || credentials.credentialResetRequired || (!credentials.geminiConfigured && !credentials.groqConfigured)) {
     return (
       <div className="min-h-screen bg-[#050806] p-4 flex flex-col justify-center">
         <div className="mx-auto max-w-xl w-full mb-3 text-center">
           <div className="inline-block rounded-[6px] border border-emerald-800/40 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300">
-            Welcome, {user.name || user.email}! Set up your AI keys to begin.
+            {credentials?.credentialResetRequired ? 'Your saved AI key needs to be restored.' : `Welcome, ${user.name || user.email}! Set up your AI keys to begin.`}
           </div>
         </div>
         <ApiKeys
