@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://interview-coach-api.onrender.com/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://interview-coach-api-5jxw.onrender.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
