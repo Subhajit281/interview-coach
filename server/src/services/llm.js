@@ -38,6 +38,9 @@ export function createLlm({ config, groq, gemini, log = console }) {
       try {
         return await (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model, apiKey: step.apiKey });
       } catch (e) {
+        // An interview-start deadline or a disconnected browser must stop the
+        // whole provider chain; falling through would keep a dead request alive.
+        if (req.signal?.aborted) throw e;
         const c = classify(e);
         if (c.kind === 'limit') limited.add(step.provider);
         failures.push({ provider: step.provider, model: step.model, ...c });

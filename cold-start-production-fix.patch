@@ -1,929 +1,256 @@
-warning: in the working copy of '.env.example', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'LICENSE', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'PROJECT_STATUS.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/index.html', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/package.json', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/App.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/ApiKeys.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/Auth.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/CodeEditor.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/Configure.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/Dashboard.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/Interview.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/ModelPicker.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/Report.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/Visualizer.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/components/ui.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/index.css', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/lib/api.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/lib/autoPair.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/lib/langs.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/lib/tts.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/lib/voiceInput.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/src/main.jsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'client/vite.config.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'deploy-config.patch', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'docs/ARCHITECTURE.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'prisma/migrations/20261122000000_initial_multi_user/migration.sql', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'prisma/schema.prisma', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'render.yaml', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/package.json', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/app.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/config/index.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/data/companies.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/data/models.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/data/modes.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/db/index.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/db/prisma.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/db/schema.sql', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/index.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/middleware/authMiddleware.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/middleware/rateLimiter.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/routes/api.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/routes/auth.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'server/src/routes/secureApi.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/authService.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/credentialService.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/evaluator.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'server/src/services/gemini.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'server/src/services/groq.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/http.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'server/src/services/interviewer.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'server/src/services/llm.js', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'server/src/services/prismaRepo.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/prompts.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/providerErrors.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/repo.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/stray.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/stt.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/services/usage.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/src/utils/encryption.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/test/engine.test.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/test/http.test.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/test/models.test.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/test/providers.test.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'server/test/voiceInput.test.js', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'vercel.json', LF will be replaced by CRLF the next time Git touches it
-diff --git a/README.md b/README.md
-index 59dd472..56884f7 100644
---- a/README.md
-+++ b/README.md
-@@ -60,7 +60,8 @@ See `docs/ARCHITECTURE.md` for provider limits, cost controls and design decisio
- 
- ## Troubleshooting
- 
--- *"Cannot reach the server"*: start it with `npm start` or `npm run dev`.
-+- *"Cannot reach the server"*: start it with `npm start` or `npm run dev`. In production, the app wakes Render through the lightweight `GET /api/health` endpoint; a sleeping free instance can take up to about 50 seconds.
-+- *First interview is still connecting*: the connection screen waits up to 90 seconds for the selected provider's first question. Retrying keeps the same idempotency key, so it will not create a duplicate interview session.
- - *Mic blocked*: allow microphone access for localhost in the browser; text mode still works.
- - *429 / provider errors*: the app retries and falls back across models automatically; if all fail you get a Retry button and nothing is lost.
- - *Cut off while thinking*: raise Pause tolerance in Voice settings.
-diff --git a/client/src/App.jsx b/client/src/App.jsx
-index db96b37..00b92e7 100644
---- a/client/src/App.jsx
-+++ b/client/src/App.jsx
-@@ -1,5 +1,6 @@
- import { useEffect, useState } from 'react';
- import { api, modelPrefs } from './lib/api.js';
-+import { BACKEND_WAKE_TIMEOUT_MS, sleep, waitForBackend } from './lib/connection.js';
- import Dashboard from './components/Dashboard.jsx';
- import Configure from './components/Configure.jsx';
- import Interview from './components/Interview.jsx';
-@@ -16,40 +17,57 @@ export default function App() {
-   const [user, setUser] = useState(null);
-   const [credentials, setCredentials] = useState(null);
-   const [authChecking, setAuthChecking] = useState(true);
--  const [introLoading, setIntroLoading] = useState(true);
-+  const [boot, setBoot] = useState({ state: 'loading', elapsedMs: 0, attempt: 0 });
- 
-   // In-app confirmation dialog states (no native browser alerts)
-   const [leaveTarget, setLeaveTarget] = useState(null);
-   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-   const [settingsTab, setSettingsTab] = useState('keys');
- 
--  // Initialize session and prefetch metadata concurrently to minimize loading wait time
-+  // A first request wakes Render. Auth starts only after that request succeeds so an
-+  // expired refresh call cannot make a cold server look like a logged-out user.
-   useEffect(() => {
--    // Intentionally show equalizer animation page for 2.5 seconds on initial load
--    const timer = setTimeout(() => {
--      setIntroLoading(false);
--    }, 2500);
--
-     let active = true;
--    api.refresh()
--      .then(() => api.me())
--      .then((r) => {
-+    const controller = new AbortController();
-+    const started = Date.now();
-+    setAuthChecking(true);
-+    setBoot((b) => ({ state: 'loading', elapsedMs: 0, attempt: b.attempt }));
-+    const progress = setInterval(() => {
-+      if (active) setBoot((b) => ({ ...b, elapsedMs: Date.now() - started }));
-+    }, 1000);
-+    (async () => {
-+      try {
-+        const waking = await waitForBackend(api.health, {
-+          signal: controller.signal,
-+          onAttempt: () => active && setBoot((b) => ({ ...b, elapsedMs: Date.now() - started })),
-+        });
-         if (!active) return;
--        setUser(r.user);
--        setCredentials(r.credentials);
--        if (r.credentials?.geminiConfigured || r.credentials?.groqConfigured) {
--          api.meta().then((m) => { if (active) setMeta(m); }).catch((e) => { if (active) setErr(e.message); });
-+        if (!waking.ok) {
-+          setBoot({ state: 'failed', elapsedMs: waking.elapsedMs, attempt: boot.attempt });
-+          setAuthChecking(false);
-+          return;
-         }
--      })
--      .catch(() => {})
--      .finally(() => {
--        if (active) setAuthChecking(false);
--      });
-+        // Keep the transition polished, but never add more than the documented 15 s.
-+        await sleep(Math.max(0, 15_000 - (Date.now() - started)), controller.signal);
-+        await api.refresh().then(() => api.me()).then((r) => {
-+          if (!active) return;
-+          setUser(r.user);
-+          setCredentials(r.credentials);
-+          if (r.credentials?.geminiConfigured || r.credentials?.groqConfigured) {
-+            api.meta().then((m) => { if (active) setMeta(m); }).catch((e) => { if (active) setErr(e.message); });
-+          }
-+        }).catch(() => {});
-+        if (active) { setBoot((b) => ({ ...b, state: 'ready' })); setAuthChecking(false); }
-+      } catch {
-+        // Unmount/Retry aborts are intentional and should not flash an error screen.
-+      } finally { clearInterval(progress); }
-+    })();
-     return () => {
-       active = false;
--      clearTimeout(timer);
-+      controller.abort();
-+      clearInterval(progress);
-     };
--  }, []);
-+  }, [boot.attempt]);
- 
-   // Fetch or refresh meta when credentials change
-   useEffect(() => {
-@@ -78,15 +96,35 @@ export default function App() {
-     setMeta(null);
-   };
- 
--  // Initial loading state with voice equalizer bars animation (intentionally shows for 2-3 seconds)
--  if (authChecking || introLoading) {
-+  if (boot.state === 'loading') {
-+    return (
-+      <div className="min-h-screen flex items-center justify-center bg-[#050806] p-6 text-center">
-+        <div className="max-w-md space-y-5">
-+          <EqualizerLoader size="lg" label="Waking up the secure interview server…" />
-+          <div className="space-y-1.5">
-+            <h1 className="text-base font-semibold text-neutral-100">Preparing Interview Coach</h1>
-+            <p className="text-sm leading-relaxed text-neutral-400">The server may take around 30 seconds to wake up. We’re getting everything ready for you. Please wait…</p>
-+            <p className="font-mono text-xs text-emerald-400">{Math.min(Math.floor(boot.elapsedMs / 1000), Math.floor(BACKEND_WAKE_TIMEOUT_MS / 1000))}s elapsed</p>
-+          </div>
-+        </div>
-+      </div>
-+    );
-+  }
-+
-+  if (boot.state === 'failed') {
-     return (
--      <div className="min-h-screen flex items-center justify-center bg-[#050806]">
--        <EqualizerLoader size="lg" />
-+      <div className="min-h-screen flex items-center justify-center bg-[#050806] p-6 text-center">
-+        <div className="max-w-md rounded-lg border border-red-900/60 bg-red-950/30 p-6 space-y-4">
-+          <h1 className="text-base font-semibold text-neutral-100">Server is still waking up</h1>
-+          <p className="text-sm leading-relaxed text-neutral-300">We could not reach the interview server after about 50 seconds. This is usually temporary on a free Render service.</p>
-+          <button className="rounded-[6px] bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500" onClick={() => setBoot((b) => ({ ...b, state: 'loading', attempt: b.attempt + 1 }))}>Retry connection</button>
-+        </div>
-       </div>
-     );
-   }
- 
-+  if (authChecking) return null;
-+
-   // Unauthenticated: show modern Auth view
-   if (!user) {
-     return (
-@@ -195,7 +233,7 @@ export default function App() {
-       <main className="mx-auto max-w-6xl p-4 sm:p-6">
-         {err && (
-           <div className="mb-4 rounded-[6px] border border-red-900/60 bg-red-950/40 p-3 text-xs text-red-200">
--            Cannot reach the server: {err}. Start it with <code>npm run dev</code>.
-+            The server could not complete that request: {err}. Please retry; on a first production visit it may still be waking up.
-           </div>
-         )}
- 
-@@ -303,4 +341,4 @@ export default function App() {
-     </div>
-     </ModelGateProvider>
-   );
--}
-\ No newline at end of file
-+}
-diff --git a/client/src/components/Interview.jsx b/client/src/components/Interview.jsx
-index b27c04d..db97e34 100644
---- a/client/src/components/Interview.jsx
-+++ b/client/src/components/Interview.jsx
-@@ -1,5 +1,6 @@
- import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
- import { api } from '../lib/api.js';
-+import { createStartKey, INTERVIEW_START_TIMEOUT_MS, isAbort, isTemporaryStartError, sleep } from '../lib/connection.js';
- import { VoiceInput } from '../lib/voiceInput.js';
- import { speak, cancelSpeech, englishVoices, ttsSupported, detectGenderFromText } from '../lib/tts.js';
- import { Button, Card, Field, inputCls, Badge, EqualizerLoader, ConfirmModal, fmtTime } from './ui.jsx';
-@@ -10,7 +11,7 @@ import { LANGS } from '../lib/langs.js';
- const CodeEditor = lazy(() => import('./CodeEditor.jsx'));
- 
- const LABEL = {
--  starting: 'Starting interview session…',
-+  starting: 'Connecting to your interviewer…',
-   ai_thinking: 'Interviewer is thinking…',
-   ai_speaking: 'Interviewer is speaking',
-   ready: 'Mic is off. Click "Start answering" when ready to speak',
-@@ -96,6 +97,8 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-   const [showEndConfirm, setShowEndConfirm] = useState(false);
-   const [hasPendingAudio, setHasPendingAudio] = useState(false);
-   const [interviewerInfo, setInterviewerInfo] = useState(null);
-+  const [connectionState, setConnectionState] = useState('starting');
-+  const [connectionSeconds, setConnectionSeconds] = useState(0);
-   const interviewerGender = useRef(null);
-   const pendingAudio = useRef(null);
- 
-@@ -117,6 +120,10 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-   const activityRef = useRef(0);
-   const endAfterSpeech = useRef(false);
-   const lastBoardRef = useRef('');
-+  const startAbortRef = useRef(null);
-+  const startInFlightRef = useRef(false);
-+  const startKeyRef = useRef(createStartKey());
-+  const mountedRef = useRef(true);
- 
-   const clearTimers = () => {
-     clearTimeout(readTimer.current); readTimer.current = null;
-@@ -185,6 +192,69 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-     speakReply(r.say, r.interviewer);
-   };
- 
-+  // The server keeps this key with the session. Retrying after a browser or proxy
-+  // timeout therefore returns the original first question instead of creating one more interview.
-+  const startSession = async () => {
-+    if (startInFlightRef.current || idRef.current || !mountedRef.current) return;
-+    startInFlightRef.current = true;
-+    const controller = new AbortController();
-+    startAbortRef.current?.abort();
-+    startAbortRef.current = controller;
-+    const deadline = Date.now() + INTERVIEW_START_TIMEOUT_MS;
-+    let timedOut = false;
-+    const timeout = setTimeout(() => { timedOut = true; controller.abort(new DOMException('Interview initialization timed out', 'AbortError')); }, INTERVIEW_START_TIMEOUT_MS);
-+    const keepAwake = setInterval(() => { api.health().catch(() => {}); }, 5_000);
-+    go('starting');
-+    setConnectionState('starting');
-+    setConnectionSeconds(0);
-+    setError('');
-+    setCanRetry(false);
-+    setModelBlocked(false);
-+    try {
-+      let result;
-+      while (Date.now() < deadline && !controller.signal.aborted) {
-+        try {
-+          result = await guard(() => api.start(cfg, { signal: controller.signal, idempotencyKey: startKeyRef.current }), { onWait: () => setError('') });
-+          break;
-+        } catch (e) {
-+          if (!isTemporaryStartError(e) || Date.now() >= deadline || controller.signal.aborted) throw e;
-+          // A 5xx can be a still-warming Render proxy or provider. The server-side key
-+          // makes this safe even if the prior response was lost after it completed.
-+          await sleep(Math.min(2_500, deadline - Date.now()), controller.signal);
-+        }
-+      }
-+      if (!result) throw new DOMException('Interview initialization timed out', 'AbortError');
-+      if (!mountedRef.current) return;
-+      idRef.current = result.interview.id;
-+      const ivInfo = result.interviewer || result.message?.interviewer;
-+      if (ivInfo) {
-+        setInterviewerInfo(ivInfo);
-+        interviewerGender.current = ivInfo.gender;
-+      }
-+      setMessages([{ role: 'interviewer', content: result.message.say, board: result.message.board }]);
-+      if (result.message.board) setBoard(result.message.board);
-+      lastBoardRef.current = result.message.board || '';
-+      lastSay.current = result.message.say;
-+      setConnectionState('connected');
-+      speakReply(result.message.say, ivInfo);
-+    } catch (e) {
-+      if (!mountedRef.current) return;
-+      const message = timedOut || isAbort(e)
-+        ? 'The interviewer did not finish initializing within 90 seconds. Your request may still be completing safely; retry uses the same session request.'
-+        : e.message;
-+      setError(message);
-+      setConnectionState('failed');
-+      setCanRetry(true);
-+      setModelBlocked(Boolean(e.modelDeclined));
-+      go('failed');
-+    } finally {
-+      clearTimeout(timeout);
-+      clearInterval(keepAwake);
-+      if (startAbortRef.current === controller) startAbortRef.current = null;
-+      startInFlightRef.current = false;
-+    }
-+  };
-+
-   const flash = (msg) => {
-     setNotice(msg);
-     setTimeout(() => setNotice((n) => (n === msg ? '' : n)), 6000);
-@@ -254,6 +324,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-   useEffect(() => {
-     if (startedRef.current) return undefined;
-     startedRef.current = true;
-+    mountedRef.current = true;
-     const v = new VoiceInput({
-       getSettings: () => settingsRef.current,
-       onLevel: (x) => { levelRef.current = x; },
-@@ -273,25 +344,10 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-         setMicOk(false);
-         setError(`Microphone unavailable (${e.message}). You can type your answers.`);
-       }
--      try {
--        const r = await guard(() => api.start(cfg), { onWait: () => setError('') });
--        idRef.current = r.interview.id;
--        const ivInfo = r.interviewer || r.message?.interviewer;
--        if (ivInfo) {
--          setInterviewerInfo(ivInfo);
--          interviewerGender.current = ivInfo.gender;
--        }
--        setMessages([{ role: 'interviewer', content: r.message.say, board: r.message.board }]);
--        if (r.message.board) setBoard(r.message.board);
--        lastBoardRef.current = r.message.board || '';
--        lastSay.current = r.message.say;
--        speakReply(r.message.say, ivInfo);
--      } catch (e) {
--        setError(e.message);
--        go('failed');
--      }
-     })();
--    return () => { clearTimers(); cancelSpeech(); v.destroy(); };
-+    // Mic permission is optional; do not make it delay the Render/LLM connection.
-+    startSession();
-+    return () => { mountedRef.current = false; startAbortRef.current?.abort(); clearTimers(); cancelSpeech(); v.destroy(); };
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, []);
- 
-@@ -307,6 +363,12 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-   }, [messages, phase]);
- 
-+  useEffect(() => {
-+    if (connectionState !== 'starting') return undefined;
-+    const timer = setInterval(() => setConnectionSeconds((s) => s + 1), 1000);
-+    return () => clearInterval(timer);
-+  }, [connectionState]);
-+
-   useEffect(() => { localStorage.setItem('ic.settings.v3', JSON.stringify(settings)); }, [settings]);
-   useEffect(() => { localStorage.setItem('ic.editor', JSON.stringify(editor)); }, [editor]);
- 
-@@ -397,12 +459,33 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-           <span className="font-mono text-xs text-neutral-400">
-             Phase: <span className="font-medium text-emerald-400">{phase.toUpperCase()}</span>
-           </span>
-+          <Badge variant={connectionState === 'failed' ? 'red' : connectionState === 'connected' ? 'emerald' : 'amber'} className="font-mono text-[10px]">
-+            {connectionState.toUpperCase()}
-+          </Badge>
-           <Button variant="danger" className="text-xs px-2.5 py-1" onClick={end} disabled={['starting', 'ending', 'failed'].includes(phase)}>
-             End Session
-           </Button>
-         </div>
-       </div>
- 
-+      {connectionState !== 'connected' && (
-+        <div className={`rounded-lg border p-5 text-center ${connectionState === 'failed' ? 'border-red-900/60 bg-red-950/30' : 'border-[#1c3b29] bg-[#08110c]'}`}>
-+          {connectionState === 'starting' ? (
-+            <>
-+              <EqualizerLoader size="md" label="Waking up the interviewer and preparing your interview session…" />
-+              <h2 className="mt-4 text-sm font-semibold text-neutral-100">Connecting to your interviewer…</h2>
-+              <p className="mt-1 text-xs text-neutral-400">This may take up to 90 seconds while the server and AI model initialize. {connectionSeconds}s elapsed.</p>
-+            </>
-+          ) : (
-+            <>
-+              <h2 className="text-sm font-semibold text-red-100">Interview connection failed</h2>
-+              <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-red-200">{error || 'The interviewer could not be initialized.'}</p>
-+              <Button variant="default" className="mt-4 text-xs" onClick={startSession}>Retry connection</Button>
-+            </>
-+          )}
-+        </div>
-+      )}
-+
-       {/* Main Split Grid: Left = Problem & Chat, Right = Code & HUD */}
-       <div className="grid gap-4 lg:grid-cols-12">
-         {/* Left Column (5 Cols on large): DSA Problem Statement & Discussion */}
-@@ -545,7 +628,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
-                     </Button>
-                   )}
-                   {canRetry && (
--                    <Button variant="default" className="text-xs" onClick={() => sendTurn('')}>
-+                    <Button variant="default" className="text-xs" onClick={phase === 'failed' ? startSession : () => sendTurn('')}>
-                       {modelBlocked ? 'Change model' : 'Retry'}
-                     </Button>
-                   )}
-diff --git a/client/src/lib/api.js b/client/src/lib/api.js
-index 33c5958..105e325 100644
---- a/client/src/lib/api.js
-+++ b/client/src/lib/api.js
-@@ -24,16 +24,17 @@ export const modelPrefs = {
- };
- export const MODEL_PROBLEM_CODES = ['MODEL_LIMIT', 'MODEL_UNAVAILABLE', 'MODEL_INVALID'];
- 
--async function req(path, { method = 'GET', body, form, retry = true } = {}) {
-+async function req(path, { method = 'GET', body, form, retry = true, signal, headers = {} } = {}) {
-   const res = await fetch(`/api${path}`, {
-     method,
-+    signal,
-     credentials: 'include',
--    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(modelPrefs.header() ? { 'X-Model-Prefs': modelPrefs.header() } : {}) },
-+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(modelPrefs.header() ? { 'X-Model-Prefs': modelPrefs.header() } : {}), ...headers },
-     body: form ?? (body ? JSON.stringify(body) : undefined),
-   });
-   let data = null;
-   try { data = await res.json(); } catch { /* non-json */ }
--  if (res.status === 401 && retry && path !== '/auth/refresh' && !path.startsWith('/auth/')) { try { const refreshed = await req('/auth/refresh', { method: 'POST', retry: false }); accessToken = refreshed.accessToken; return req(path, { method, body, form, retry: false }); } catch { accessToken = null; } }
-+  if (res.status === 401 && retry && path !== '/auth/refresh' && !path.startsWith('/auth/')) { try { const refreshed = await req('/auth/refresh', { method: 'POST', retry: false, signal }); accessToken = refreshed.accessToken; return req(path, { method, body, form, retry: false, signal, headers }); } catch { accessToken = null; } }
-   if (!res.ok) {
-     const e = new Error(data?.error || `Request failed (${res.status}). Is the server running?`);
-     Object.assign(e, { status: res.status, code: data?.code, provider: data?.provider, model: data?.model, reason: data?.reason, exhausted: data?.exhausted });
-@@ -43,6 +44,9 @@ async function req(path, { method = 'GET', body, form, retry = true } = {}) {
- }
- 
- export const api = {
-+  // Public and deliberately tiny: this is safe to call before the user is signed in
-+  // and is used to wake a sleeping Render instance without touching the database.
-+  health: ({ signal } = {}) => req('/health', { signal, retry: false }),
-   register: (body) => req('/auth/register', { method: 'POST', body }),
-   login: (body) => req('/auth/login', { method: 'POST', body }).then((r) => { accessToken = r.accessToken; return r; }),
-   refresh: () => req('/auth/refresh', { method: 'POST' }).then((r) => { accessToken = r.accessToken; return r; }),
-@@ -58,7 +62,7 @@ export const api = {
-   usage: () => req('/usage'),
-   interviews: () => req('/interviews'),
-   interview: (id) => req(`/interviews/${id}`),
--  start: (cfg) => req('/interviews', { method: 'POST', body: cfg }),
-+  start: (cfg, { signal, idempotencyKey } = {}) => req('/interviews', { method: 'POST', body: cfg, signal, headers: idempotencyKey ? { 'X-Interview-Start-Key': idempotencyKey } : {} }),
-   turn: (id, body) => req(`/interviews/${id}/turn`, { method: 'POST', body }),
-   pause: (id) => req(`/interviews/${id}/pause`, { method: 'POST' }),
-   resume: (id) => req(`/interviews/${id}/resume`, { method: 'POST' }),
-diff --git a/prisma/schema.prisma b/prisma/schema.prisma
-index 7fb21fa..0c94b4f 100644
---- a/prisma/schema.prisma
-+++ b/prisma/schema.prisma
-@@ -72,6 +72,7 @@ model InterviewSession {
-   model String
-   durationSec Int?
-   status String @default("active")
-+  startRequestKey String?
-   startTime DateTime @default(now())
-   endTime DateTime?
-   createdAt DateTime @default(now())
-@@ -84,6 +85,7 @@ model InterviewSession {
-   analytics InterviewAnalytics?
-   @@index([userId, createdAt])
-   @@index([userId, status])
-+  @@unique([userId, startRequestKey])
- }
- 
- model InterviewMessage {
-diff --git a/server/src/app.js b/server/src/app.js
-index 82c9a4a..ad34aa3 100644
---- a/server/src/app.js
-+++ b/server/src/app.js
-@@ -20,6 +20,7 @@ import { createAuthMiddleware } from './middleware/authMiddleware.js';
- import { createAuthRouter } from './routes/auth.js';
- import { secureApiRouter } from './routes/secureApi.js';
- import { createPrismaRepo } from './services/prismaRepo.js';
-+import { redactSecrets } from './utils/redact.js';
- 
- const here = dirname(fileURLToPath(import.meta.url));
- 
-@@ -37,6 +38,9 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
-   if (config.trustProxy) app.set('trust proxy', config.trustProxy);
-   // Unauthenticated liveness probe for the hosting platform (everything under /api requires a login).
-   app.get('/healthz', (_req, res) => res.json({ ok: true }));
-+  // This endpoint intentionally precedes authentication. It wakes Render and proves
-+  // the HTTP process is alive without querying Prisma or calling an LLM provider.
-+  app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'interview-coach' }));
-   app.use(cors({ origin: config.clientOrigin, credentials: true }));
-   app.use(express.json({ limit: '1mb' }));
-   app.use(cookieParser());
-@@ -60,7 +64,7 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
-     if (err.name === 'MulterError') err.status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-     let status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
-     if (err.name === 'ProviderError' && status !== 503 && status !== 429) status = 502;
--    if (status >= 500) console.error(err.name, err.message);
-+    if (status >= 500) console.error(err.name, redactSecrets(err.message));
-     // Errors that carry a publicMessage are safe to show and tell the UI what to do (e.g. open the model picker).
-     if (err.publicMessage) {
-       const { code, provider, model, reason, exhausted } = err;
-diff --git a/server/src/routes/api.js b/server/src/routes/api.js
-index 29b3b60..cc78fe5 100644
---- a/server/src/routes/api.js
-+++ b/server/src/routes/api.js
-@@ -3,6 +3,7 @@ import multer from 'multer';
- import { MODES, POSITIONS, LEGACY_POSITIONS, DIFFICULTIES, DURATIONS, STYLES, PERSONALITIES } from '../data/modes.js';
- import { COMPANIES } from '../data/companies.js';
- import { config } from '../config/index.js';
-+import { createStartGuard, validStartKey } from '../services/startGuard.js';
- 
- const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
- const httpError = (status, message) => Object.assign(new Error(message), { status });
-@@ -31,6 +32,7 @@ export function validateConfig(body, repo) {
- export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
-   const r = Router();
-   const busy = new Set();
-+  const starts = createStartGuard();
- 
-   r.get('/health', (_req, res) => res.json({
-     ok: true,
-@@ -72,7 +74,10 @@ export function apiRouter({ repo, interviewer, evaluator, stt, tracker }) {
- 
-   r.post('/interviews', wrap(async (req, res) => {
-     const cfg = validateConfig(req.body, repo);
--    const result = await interviewer.start(cfg);
-+    const suppliedKey = req.get('x-interview-start-key');
-+    const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
-+    if (suppliedKey && !startRequestKey) throw httpError(400, 'Invalid interview start request key');
-+    const result = await starts.run(startRequestKey, () => interviewer.start(cfg));
-     res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
-   }));
- 
+diff --git a/package.json b/package.json
+index 770a16d..134831f 100644
+--- a/package.json
++++ b/package.json
+@@ -7,6 +7,7 @@
+     "client"
+   ],
+   "scripts": {
++    "prestart": "prisma generate --schema=prisma/schema.prisma && prisma migrate deploy --schema=prisma/schema.prisma",
+     "dev": "concurrently -n server,client \"npm run dev -w server\" \"npm run dev -w client\"",
+     "build": "npm run build -w client",
+     "start": "npm run start -w server",
 diff --git a/server/src/routes/secureApi.js b/server/src/routes/secureApi.js
-index 38d31ce..113b7b8 100644
+index 113b7b8..dac7f1c 100644
 --- a/server/src/routes/secureApi.js
 +++ b/server/src/routes/secureApi.js
-@@ -7,6 +7,7 @@ import { createEvaluator } from '../services/evaluator.js';
- import { config } from '../config/index.js';
- import { catalogFor, assertAllowedModel, parseModelPrefs, PROVIDER_LABEL } from '../data/models.js';
- import { friendly } from '../services/providerErrors.js';
-+import { createStartGuard, validStartKey } from '../services/startGuard.js';
- const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
- const err = (status, message) => Object.assign(new Error(message), { status });
- const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-@@ -19,7 +20,7 @@ async function configFor(body, repo) {
-   return { mode, company, position, difficulty: b.difficulty, personality: b.personality, durationMin, style: STYLES[b.style] ? b.style : 'standard', round: COMPANIES[company].rounds.includes(b.round) ? b.round : COMPANIES[company].rounds[0], projectId };
- }
- export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
--  const r = Router(), busy = new Set();
-+  const r = Router(), busy = new Set(), starts = createStartGuard();
-   const repo = (req) => repoForUser(req.userId);
-   const services = async (req) => { const keys = { ...(await credentials.resolve(req.userId)), models: parseModelPrefs(config, req.get('x-model-prefs')) }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
-   r.get('/health', (_q, res) => res.json({ ok: true, authRequired: true }));
-@@ -38,7 +39,16 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
-   r.get('/stats', wrap(async (req, res) => { const current = repo(req), topics = await current.topicStats(), overview = await current.overview(); const mapped = topics.map((t) => { const [mode, ...rest] = t.topic.split(':'); return { mode, topic: rest.join(':'), attempts: t.attempts, avg: Math.round(t.avg_score * 10) / 10, hints: t.hints_total, last_seen: t.last_seen }; }); const sorted = [...mapped].sort((a, b) => a.avg - b.avg); res.json({ ...overview, weakTopics: sorted.filter((t) => t.avg < 6).slice(0, 6), strongTopics: [...sorted].reverse().filter((t) => t.avg >= 7).slice(0, 6), recentWeaknesses: await current.recentWeaknesses(3, 6) }); }));
-   r.get('/interviews', wrap(async (req, res) => res.json({ interviews: await repo(req).listInterviews() })));
-   r.get('/interviews/:id', wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); res.json({ interview, messages: await current.getMessages(interview.id), report: await current.getReport(interview.id) }); }));
--  r.post('/interviews', wrap(async (req, res) => { const s = await services(req), cfg = await configFor(req.body, s.repo); const result = await s.interviewer.start(cfg); res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer }); }));
-+  r.post('/interviews', wrap(async (req, res) => {
-+    const suppliedKey = req.get('x-interview-start-key');
-+    const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
-+    if (suppliedKey && !startRequestKey) throw err(400, 'Invalid interview start request key.');
-+    const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
-+      const s = await services(req), cfg = await configFor(req.body, s.repo);
-+      return s.interviewer.start(cfg, { startRequestKey });
-+    });
-+    res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
-+  }));
+@@ -43,11 +43,32 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
+     const suppliedKey = req.get('x-interview-start-key');
+     const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
+     if (suppliedKey && !startRequestKey) throw err(400, 'Invalid interview start request key.');
+-    const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
+-      const s = await services(req), cfg = await configFor(req.body, s.repo);
+-      return s.interviewer.start(cfg, { startRequestKey });
+-    });
+-    res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
++    const controller = new AbortController();
++    const abort = () => controller.abort(new DOMException('Client disconnected', 'AbortError'));
++    let timedOut = false;
++    // Leave a little time for Vercel to return the result before its client-side
++    // 90-second deadline, while still allowing a cold model a substantial window.
++    const deadline = setTimeout(() => { timedOut = true; controller.abort(new DOMException('Interviewer initialization exceeded 85 seconds', 'AbortError')); }, 85_000);
++    req.once('aborted', abort);
++    try {
++      const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
++        const s = await services(req), cfg = await configFor(req.body, s.repo);
++        return s.interviewer.start(cfg, { startRequestKey, signal: controller.signal });
++      });
++      res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
++    } catch (e) {
++      if (timedOut) {
++        throw Object.assign(new Error('The interviewer did not become ready in time. Please retry; no duplicate session was created.'), {
++          status: 504,
++          code: 'INTERVIEW_START_TIMEOUT',
++          publicMessage: 'The interviewer did not become ready in time. Please retry; no duplicate session was created.',
++        });
++      }
++      throw e;
++    } finally {
++      clearTimeout(deadline);
++      req.removeListener('aborted', abort);
++    }
+   }));
    r.post('/interviews/:id/turn', wrap(async (req, res) => { const key = `${req.userId}:${req.params.id}`; if (busy.has(key)) throw err(409, 'The previous turn is still being processed.'); busy.add(key); try { const s = await services(req); res.json(await s.interviewer.turn(req.params.id, { text: req.body?.text, elapsedSec: Number(req.body?.elapsedSec) || 0 })); } finally { busy.delete(key); } }));
    for (const [path, from, to] of [['/interviews/:id/pause', 'active', 'paused'], ['/interviews/:id/resume', 'paused', 'active']]) r.post(path, wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status !== from) throw err(409, `Interview is ${interview.status}.`); await current.setStatus(interview.id, to); res.json({ ok: true, status: to }); }));
-   r.post('/interviews/:id/end', wrap(async (req, res) => { const s = await services(req), interview = await s.repo.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status === 'completed') return res.json({ interviewId: interview.id, report: await s.repo.getReport(interview.id) }); const messages = await s.repo.getMessages(interview.id); if (messages.filter((m) => m.role === 'candidate').length < 2) { await s.repo.finishInterview(interview.id, 'abandoned', req.body?.elapsedSec); return res.json({ interviewId: interview.id, report: null, note: 'Too short to evaluate (fewer than 2 answers).' }); } await s.repo.finishInterview(interview.id, 'completed', req.body?.elapsedSec); try { res.json({ interviewId: interview.id, report: await s.evaluator.evaluate(interview.id) }); } catch (e) { if (e?.publicMessage) throw e; throw err(502, 'Interview was saved, but the report could not be generated. You can retry it.'); } }));
-diff --git a/server/src/services/http.js b/server/src/services/http.js
-index e4139af..b866522 100644
---- a/server/src/services/http.js
-+++ b/server/src/services/http.js
-@@ -30,20 +30,34 @@ export async function fetchWithRetry(url, init, opts = {}) {
-     fetchImpl = fetch,
-     sleep = defaultSleep,
-     label = 'request',
-+    timeoutMs = 25_000,
-   } = opts;
+diff --git a/server/src/services/gemini.js b/server/src/services/gemini.js
+index 0e1a307..72eef3a 100644
+--- a/server/src/services/gemini.js
++++ b/server/src/services/gemini.js
+@@ -15,7 +15,7 @@ export function toContents(messages) {
+ }
  
-   let lastErr;
-   for (let attempt = 0; attempt <= retries; attempt++) {
-     const backoff = baseMs * 2 ** attempt + Math.floor(Math.random() * 100);
-     let res;
-+    const controller = new AbortController();
-+    let timedOut = false;
-+    const cancel = () => controller.abort(init?.signal?.reason || new DOMException('Aborted', 'AbortError'));
-+    if (init?.signal?.aborted) cancel();
-+    else init?.signal?.addEventListener('abort', cancel, { once: true });
-+    const timeout = setTimeout(() => { timedOut = true; controller.abort(new DOMException('Request timed out', 'AbortError')); }, timeoutMs);
-     try {
--      res = await fetchImpl(url, init);
-+      res = await fetchImpl(url, { ...init, signal: controller.signal });
-     } catch (e) {
--      lastErr = new ProviderError(`${label}: network error (${e.message})`, 0);
-+      lastErr = timedOut
-+        ? new ProviderError(`${label}: request timed out after ${timeoutMs}ms`, 504)
-+        : new ProviderError(`${label}: network error (${e.message})`, init?.signal?.aborted ? 499 : 0);
-+      clearTimeout(timeout);
-+      init?.signal?.removeEventListener('abort', cancel);
-+      if (init?.signal?.aborted) throw lastErr;
-       if (attempt === retries) throw lastErr;
-       await sleep(backoff);
-       continue;
-     }
-+    clearTimeout(timeout);
-+    init?.signal?.removeEventListener('abort', cancel);
-     if (res.ok) return res;
+ export function createGemini({ config, fetchImpl = fetch, sleep }) {
+-  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey }) {
++  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey, signal, timeoutMs, retries }) {
+     const generationConfig = { temperature, maxOutputTokens: maxTokens };
+     if (json) generationConfig.responseMimeType = 'application/json';
+     // Skip "thinking" on 2.5 Flash for low latency; the interviewer turn does not need it.
+@@ -26,13 +26,14 @@ export function createGemini({ config, fetchImpl = fetch, sleep }) {
+       {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey || config.gemini.apiKey },
++        signal,
+         body: JSON.stringify({
+           systemInstruction: { parts: [{ text: system }] },
+           contents: toContents(messages),
+           generationConfig,
+         }),
+       },
+-      { fetchImpl, sleep, label: `Gemini ${model}` },
++      { fetchImpl, sleep, label: `Gemini ${model}`, timeoutMs, retries },
+     );
+     const data = await res.json();
+     const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+diff --git a/server/src/services/groq.js b/server/src/services/groq.js
+index 698dce7..f850b3b 100644
+--- a/server/src/services/groq.js
++++ b/server/src/services/groq.js
+@@ -9,9 +9,9 @@ export const STT_VOCAB_PROMPT =
  
-     const body = await res.text().catch(() => '');
+ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
+   const auth = (apiKey) => ({ Authorization: `Bearer ${apiKey || config.groq.apiKey}` });
+-  const opts = (label) => ({ fetchImpl, sleep, label });
++  const opts = (label, request = {}) => ({ fetchImpl, sleep, label, ...request });
+ 
+-  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey }) {
++  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey, signal, timeoutMs, retries }) {
+     const body = {
+       model,
+       messages: [{ role: 'system', content: system }, ...messages],
+@@ -23,8 +23,8 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
+ 
+     const res = await fetchWithRetry(
+       `${BASE}/chat/completions`,
+-      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+-      opts(`Groq ${model}`),
++      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
++      opts(`Groq ${model}`, { timeoutMs, retries }),
+     );
+     tracker?.record('groq', model, res.headers);
+     const data = await res.json();
 diff --git a/server/src/services/interviewer.js b/server/src/services/interviewer.js
-index 20d215c..e32d274 100644
+index e32d274..3434237 100644
 --- a/server/src/services/interviewer.js
 +++ b/server/src/services/interviewer.js
-@@ -176,14 +176,29 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+@@ -67,12 +67,12 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+   // Per-thread state: follow-ups since the last brand-new question and the recent satisfaction scores.
+   const threadById = new Map();
+ 
+-  async function ask(system, messages) {
+-    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6, credentials });
++  async function ask(system, messages, request = {}) {
++    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6, credentials, ...request });
+     return { res, reply: parseInterviewerReply(res.text) };
+   }
+ 
+-  async function generate(interviewId, elapsedSec = 0) {
++  async function generate(interviewId, elapsedSec = 0, request = {}) {
+     const iv = await repo.getInterview(interviewId);
+     const mode = MODES[iv.mode];
+     const history = await repo.getMessages(interviewId, 20);
+@@ -110,7 +110,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+       ? toLlmMessages(history)
+       : [{ role: 'user', content: '[The interview begins. Introduce yourself professionally in one sentence, state the format briefly, and ask your first question according to the plan.]' }];
+ 
+-    let { res, reply } = await ask(system, messages);
++    let { res, reply } = await ask(system, messages, request);
+ 
+     // Guardrails: up to two corrective retries when the model closes early, skips the counter-question or judges without evidence.
+     const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
+@@ -140,7 +140,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+       if (!c) break;
+       corrections += `\n\nCORRECTION: ${c}`;
+       try {
+-        const retry = await ask(`${system}${corrections}`, messages);
++        const retry = await ask(`${system}${corrections}`, messages, request);
+         if (retry.reply.say || retry.reply.verdict === 'stray') { res = retry.res; reply = retry.reply; } else break;
+       } catch { break; /* keep the previous reply */ }
+     }
+@@ -176,7 +176,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
      return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model };
    }
  
--  async function start(cfg) {
--    const interviewId = await repo.createInterview(cfg);
-+  async function start(cfg, { startRequestKey = null } = {}) {
-+    const created = repo.createOrGetInterview
-+      ? await repo.createOrGetInterview({ ...cfg, startRequestKey })
-+      : { id: await repo.createInterview(cfg), created: true };
-+    const interviewId = created.id;
-+    if (!created.created) {
-+      const messages = await repo.getMessages(interviewId, 1);
-+      const first = messages.find((m) => m.role === 'interviewer');
-+      if (first) {
-+        const persona = getInterviewerPersona(interviewId);
-+        return { interview: await repo.getInterview(interviewId), reply: { say: first.content, board: first.board || '', interviewer: persona }, interviewer: persona };
-+      }
-+      throw Object.assign(new Error('Your interview is still being initialized. Please keep this page open and retry shortly.'), { status: 409, code: 'START_IN_PROGRESS' });
-+    }
-     try {
-       const reply = await generate(interviewId, 0);
-+      // Sessions created through the idempotent production path are only active
-+      // once their first interviewer message exists.
-+      await repo.setStatus(interviewId, 'active');
-       const persona = getInterviewerPersona(interviewId);
-       return { interview: await repo.getInterview(interviewId), reply, interviewer: persona };
-     } catch (e) {
--      await repo.deleteInterview(interviewId);
-+      if (created.created) await repo.deleteInterview(interviewId);
-       throw e;
+-  async function start(cfg, { startRequestKey = null } = {}) {
++  async function start(cfg, { startRequestKey = null, signal } = {}) {
+     const created = repo.createOrGetInterview
+       ? await repo.createOrGetInterview({ ...cfg, startRequestKey })
+       : { id: await repo.createInterview(cfg), created: true };
+@@ -191,7 +191,9 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+       throw Object.assign(new Error('Your interview is still being initialized. Please keep this page open and retry shortly.'), { status: 409, code: 'START_IN_PROGRESS' });
      }
-   }
+     try {
+-      const reply = await generate(interviewId, 0);
++      // A first question is intentionally quick: the browser has a 90 s
++      // connection window, so one provider should not consume it all.
++      const reply = await generate(interviewId, 0, { signal, timeoutMs: 15_000, retries: 1 });
+       // Sessions created through the idempotent production path are only active
+       // once their first interviewer message exists.
+       await repo.setStatus(interviewId, 'active');
+diff --git a/server/src/services/llm.js b/server/src/services/llm.js
+index 8ce3545..b6309ab 100644
+--- a/server/src/services/llm.js
++++ b/server/src/services/llm.js
+@@ -38,6 +38,9 @@ export function createLlm({ config, groq, gemini, log = console }) {
+       try {
+         return await (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model, apiKey: step.apiKey });
+       } catch (e) {
++        // An interview-start deadline or a disconnected browser must stop the
++        // whole provider chain; falling through would keep a dead request alive.
++        if (req.signal?.aborted) throw e;
+         const c = classify(e);
+         if (c.kind === 'limit') limited.add(step.provider);
+         failures.push({ provider: step.provider, model: step.model, ...c });
 diff --git a/server/src/services/prismaRepo.js b/server/src/services/prismaRepo.js
-index 01df2a8..676bb10 100644
+index 676bb10..7e18579 100644
 --- a/server/src/services/prismaRepo.js
 +++ b/server/src/services/prismaRepo.js
-@@ -9,6 +9,24 @@ export function createPrismaRepo(prisma, userId) {
+@@ -4,20 +4,49 @@ const question = (x) => ({ ...x, interview_id: x.sessionId, title: x.question, m
+ 
+ export function createPrismaRepo(prisma, userId) {
+   const own = (id) => ({ id, userId });
++  // A deployment should always run `prisma generate`, but retaining a safe
++  // in-memory fallback avoids taking the whole interview flow down if a host
++  // briefly runs code newer than its generated Prisma client.
++  let supportsStartRequestKey = true;
++  const staleClientError = (e) => e?.name === 'PrismaClientValidationError' && /Unknown argument [`']?startRequestKey/i.test(e.message || '');
++  const createSession = async (c, withStartKey) => prisma.interviewSession.create({ data: {
++    userId, projectId: c.projectId || null, ...(withStartKey ? { startRequestKey: c.startRequestKey } : {}),
++    title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position,
++    round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty,
++    model: 'automatic', durationSec: c.durationMin * 60, status: withStartKey ? 'initializing' : 'active',
++  } });
+   return {
+     async addProject(name, description) { return (await prisma.interviewProject.create({ data: { userId, name, description } })).id; },
      async listProjects() { return (await prisma.interviewProject.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map((p) => ({ ...p, preview: p.description.slice(0, 200), created_at: p.createdAt })); },
      async getProject(id) { return prisma.interviewProject.findFirst({ where: { id, userId } }); },
      async deleteProject(id) { return prisma.interviewProject.deleteMany({ where: own(id) }); },
-+    async createOrGetInterview(c) {
-+      if (c.startRequestKey) {
-+        const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
-+        if (existing) return { id: existing.id, created: false };
-+      }
-+      try {
-+        const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, startRequestKey: c.startRequestKey || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60, status: c.startRequestKey ? 'initializing' : 'active' } });
+     async createOrGetInterview(c) {
++      if (!c.startRequestKey || !supportsStartRequestKey) {
++        const row = await createSession(c, false);
 +        return { id: row.id, created: true };
-+      } catch (e) {
-+        // A second Render worker can race the pre-read. The unique key makes it
-+        // return the original row instead of creating a second interview.
-+        if (c.startRequestKey && e?.code === 'P2002') {
++      }
+       if (c.startRequestKey) {
+-        const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
+-        if (existing) return { id: existing.id, created: false };
++        try {
 +          const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
 +          if (existing) return { id: existing.id, created: false };
++        } catch (e) {
++          if (!staleClientError(e)) throw e;
++          supportsStartRequestKey = false;
++          console.error('[idempotency] Prisma client is stale; using single-process start protection until redeploy.');
++          const row = await createSession(c, false);
++          return { id: row.id, created: true };
 +        }
-+        throw e;
-+      }
-+    },
+       }
+       try {
+-        const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, startRequestKey: c.startRequestKey || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60, status: c.startRequestKey ? 'initializing' : 'active' } });
++        const row = await createSession(c, true);
+         return { id: row.id, created: true };
+       } catch (e) {
++        if (staleClientError(e)) {
++          supportsStartRequestKey = false;
++          console.error('[idempotency] Prisma client is stale; using single-process start protection until redeploy.');
++          const row = await createSession(c, false);
++          return { id: row.id, created: true };
++        }
+         // A second Render worker can race the pre-read. The unique key makes it
+         // return the original row instead of creating a second interview.
+         if (c.startRequestKey && e?.code === 'P2002') {
+@@ -28,7 +57,7 @@ export function createPrismaRepo(prisma, userId) {
+       }
+     },
      async createInterview(c) {
-       const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60 } });
+-      const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60 } });
++      const row = await createSession(c, false);
        return row.id;
-diff --git a/server/test/engine.test.js b/server/test/engine.test.js
-index 3d8c2e3..7c56d58 100644
---- a/server/test/engine.test.js
-+++ b/server/test/engine.test.js
-@@ -141,6 +141,27 @@ test('full interview flow: start, turn, pause/resume, retry, end, report, stats'
-   } finally { close(); }
- });
- 
-+test('health is public and duplicate in-flight starts share one interview request', async () => {
-+  const db = openDb(':memory:');
-+  let calls = 0;
-+  const llm = { chat: async () => {
-+    calls++;
-+    await new Promise((resolve) => setTimeout(resolve, 15));
-+    return { text: JSON.stringify(reply({ say: 'First question.', new_question: true, question_title: 'Q1' })), provider: 'fake', model: 'f' };
-+  } };
-+  const server = createApp({ db, llm, stt: {} }).listen(0);
-+  const base = `http://127.0.0.1:${server.address().port}`;
-+  const post = () => fetch(`${base}/api/interviews`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Interview-Start-Key': 'start-key-12345678' }, body: JSON.stringify(CFG) }).then(async (r) => ({ status: r.status, body: await r.json() }));
-+  try {
-+    assert.equal((await fetch(`${base}/api/health`)).status, 200);
-+    const [a, b] = await Promise.all([post(), post()]);
-+    assert.equal(a.status, 200);
-+    assert.equal(b.status, 200);
-+    assert.equal(a.body.interview.id, b.body.interview.id);
-+    assert.equal(calls, 1);
-+  } finally { server.close(); }
-+});
-+
- test('too-short interviews are abandoned without a report call', async () => {
-   const { call, close } = await boot([reply({ say: 'First question?' })]);
-   try {
-@@ -420,4 +441,4 @@ test('closing is allowed in the final stretch', async () => {
-     const r = await call(`/interviews/${id}/turn`, 'POST', { text: 'A full and correct answer to the question.', elapsedSec: 29 * 60 });
-     assert.equal(r.data.wrapUp, true);
-   } finally { close(); }
--});
-\ No newline at end of file
-+});
-diff --git a/server/test/http.test.js b/server/test/http.test.js
-index bf7e326..f95bfb1 100644
---- a/server/test/http.test.js
-+++ b/server/test/http.test.js
-@@ -33,3 +33,8 @@ test('retries network errors then throws', async () => {
-   await assert.rejects(fetchWithRetry('http://x', {}, { fetchImpl, sleep: noSleep, retries: 2 }), /network error/);
-   assert.equal(calls, 3);
- });
-+
-+test('times out an upstream provider request instead of holding the interview forever', async () => {
-+  const fetchImpl = (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
-+  await assert.rejects(fetchWithRetry('http://x', {}, { fetchImpl, sleep: noSleep, retries: 0, timeoutMs: 5 }), (e) => e instanceof ProviderError && e.status === 504);
-+});
-
-warning: in the working copy of 'client/src/lib/connection.js', LF will be replaced by CRLF the next time Git touches it
-diff --git a/client/src/lib/connection.js b/client/src/lib/connection.js
-new file mode 100644
-index 0000000..7068637
---- /dev/null
-+++ b/client/src/lib/connection.js
-@@ -0,0 +1,63 @@
-+export const BACKEND_WAKE_TIMEOUT_MS = 50_000;
-+export const BACKEND_WAKE_INTERVAL_MS = 5_000;
-+export const BACKEND_WAKE_REQUEST_TIMEOUT_MS = 8_000;
-+export const INTERVIEW_START_TIMEOUT_MS = 90_000;
-+
-+export const sleep = (ms, signal) => new Promise((resolve, reject) => {
-+  const timer = setTimeout(done, ms);
-+  function done() { signal?.removeEventListener('abort', abort); resolve(); }
-+  function abort() { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason || new DOMException('Aborted', 'AbortError')); }
-+  if (signal?.aborted) abort();
-+  else signal?.addEventListener('abort', abort, { once: true });
-+});
-+
-+export function isAbort(error) {
-+  return error?.name === 'AbortError' || /aborted|timed out/i.test(String(error?.message || ''));
-+}
-+
-+export function isTemporaryStartError(error) {
-+  const status = Number(error?.status) || 0;
-+  // Credential/model errors are already actionable; a Render/network/provider outage is not.
-+  if (['PROVIDER_AUTH', 'MODEL_INVALID', 'MODEL_UNAVAILABLE'].includes(error?.code)) return false;
-+  return !status || status === 408 || status === 409 || status === 429 || status >= 500;
-+}
-+
-+function requestSignal(parent, timeoutMs) {
-+  const controller = new AbortController();
-+  const timer = setTimeout(() => controller.abort(new DOMException('Request timed out', 'AbortError')), timeoutMs);
-+  const abort = () => controller.abort(parent.reason || new DOMException('Aborted', 'AbortError'));
-+  if (parent?.aborted) abort();
-+  else parent?.addEventListener('abort', abort, { once: true });
-+  return {
-+    signal: controller.signal,
-+    clear: () => { clearTimeout(timer); parent?.removeEventListener('abort', abort); },
-+  };
-+}
-+
-+/** Poll a public liveness endpoint without allowing any single proxy request to hang forever. */
-+export async function waitForBackend(health, { signal, timeoutMs = BACKEND_WAKE_TIMEOUT_MS, intervalMs = BACKEND_WAKE_INTERVAL_MS, requestTimeoutMs = BACKEND_WAKE_REQUEST_TIMEOUT_MS, onAttempt } = {}) {
-+  const started = Date.now();
-+  let lastError = null;
-+  while (Date.now() - started < timeoutMs) {
-+    if (signal?.aborted) throw signal.reason || new DOMException('Aborted', 'AbortError');
-+    onAttempt?.(Date.now() - started);
-+    const remaining = timeoutMs - (Date.now() - started);
-+    const request = requestSignal(signal, Math.max(1, Math.min(requestTimeoutMs, remaining)));
-+    try {
-+      await health({ signal: request.signal });
-+      request.clear();
-+      return { ok: true, elapsedMs: Date.now() - started };
-+    } catch (error) {
-+      request.clear();
-+      if (signal?.aborted) throw signal.reason || error;
-+      lastError = error;
-+    }
-+    const pause = Math.min(intervalMs, timeoutMs - (Date.now() - started));
-+    if (pause > 0) await sleep(pause, signal);
-+  }
-+  return { ok: false, elapsedMs: Date.now() - started, error: lastError };
-+}
-+
-+export function createStartKey() {
-+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-+}
-
-warning: in the working copy of 'prisma/migrations/20261122010000_interview_start_idempotency/migration.sql', LF will be replaced by CRLF the next time Git touches it
-diff --git a/prisma/migrations/20261122010000_interview_start_idempotency/migration.sql b/prisma/migrations/20261122010000_interview_start_idempotency/migration.sql
-new file mode 100644
-index 0000000..2ee6705
---- /dev/null
-+++ b/prisma/migrations/20261122010000_interview_start_idempotency/migration.sql
-@@ -0,0 +1,2 @@
-+ALTER TABLE "InterviewSession" ADD COLUMN "startRequestKey" TEXT;
-+CREATE UNIQUE INDEX "InterviewSession_userId_startRequestKey_key" ON "InterviewSession"("userId", "startRequestKey");
-
-warning: in the working copy of 'server/src/services/startGuard.js', LF will be replaced by CRLF the next time Git touches it
-diff --git a/server/src/services/startGuard.js b/server/src/services/startGuard.js
-new file mode 100644
-index 0000000..462afc5
---- /dev/null
-+++ b/server/src/services/startGuard.js
-@@ -0,0 +1,21 @@
-+/**
-+ * Coalesces duplicate HTTP submissions for one interview start key.
-+ * The persistent key on InterviewSession covers restarts; this small in-memory
-+ * guard covers the interval before the first question has been stored.
-+ */
-+export function createStartGuard() {
-+  const pending = new Map();
-+  return {
-+    run(key, work) {
-+      if (!key) return work();
-+      if (pending.has(key)) return pending.get(key);
-+      const task = Promise.resolve().then(work).finally(() => pending.delete(key));
-+      pending.set(key, task);
-+      return task;
-+    },
-+  };
-+}
-+
-+export function validStartKey(value) {
-+  return typeof value === 'string' && /^[a-zA-Z0-9-]{16,128}$/.test(value) ? value : null;
-+}
-
-warning: in the working copy of 'server/src/utils/redact.js', LF will be replaced by CRLF the next time Git touches it
-diff --git a/server/src/utils/redact.js b/server/src/utils/redact.js
-new file mode 100644
-index 0000000..b53a4be
---- /dev/null
-+++ b/server/src/utils/redact.js
-@@ -0,0 +1,6 @@
-+/** Keep operational logs useful without ever echoing an authorization or API key value. */
-+export function redactSecrets(value) {
-+  return String(value || '')
-+    .replace(/(Bearer\s+)[^\s,]+/gi, '$1[REDACTED]')
-+    .replace(/((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,&]+/gi, '$1[REDACTED]');
-+}
-
-warning: in the working copy of 'server/test/redact.test.js', LF will be replaced by CRLF the next time Git touches it
-diff --git a/server/test/redact.test.js b/server/test/redact.test.js
-new file mode 100644
-index 0000000..a624acb
---- /dev/null
-+++ b/server/test/redact.test.js
-@@ -0,0 +1,11 @@
-+import test from 'node:test';
-+import assert from 'node:assert/strict';
-+import { redactSecrets } from '../src/utils/redact.js';
-+
-+test('diagnostic logging redacts common credential forms', () => {
-+  const text = redactSecrets('HTTP 401 Authorization: Bearer secret-value api_key=also-secret password: no-leaks');
-+  assert.ok(!text.includes('secret-value'));
-+  assert.ok(!text.includes('also-secret'));
-+  assert.ok(!text.includes('no-leaks'));
-+  assert.match(text, /\[REDACTED\]/);
-+});
-
-warning: in the working copy of 'server/test/startGuard.test.js', LF will be replaced by CRLF the next time Git touches it
-diff --git a/server/test/startGuard.test.js b/server/test/startGuard.test.js
-new file mode 100644
-index 0000000..fdcf40c
---- /dev/null
-+++ b/server/test/startGuard.test.js
-@@ -0,0 +1,19 @@
-+import test from 'node:test';
-+import assert from 'node:assert/strict';
-+import { createStartGuard, validStartKey } from '../src/services/startGuard.js';
-+
-+test('start guard shares one in-flight operation for an idempotency key', async () => {
-+  const guard = createStartGuard();
-+  let calls = 0;
-+  const work = async () => { calls++; await new Promise((resolve) => setTimeout(resolve, 5)); return { id: 1 }; };
-+  const [a, b] = await Promise.all([guard.run('user:key', work), guard.run('user:key', work)]);
-+  assert.deepEqual(a, { id: 1 });
-+  assert.deepEqual(b, { id: 1 });
-+  assert.equal(calls, 1);
-+});
-+
-+test('start keys accept UUID-like values and reject malformed headers', () => {
-+  assert.equal(validStartKey('51f14516-3e95-4475-9b8f-933566837cc1'), '51f14516-3e95-4475-9b8f-933566837cc1');
-+  assert.equal(validStartKey('short'), null);
-+  assert.equal(validStartKey('spaces are not allowed'), null);
-+});
+     },
+     async getInterview(id) { return session(await prisma.interviewSession.findFirst({ where: own(id) })); },
 

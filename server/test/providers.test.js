@@ -6,7 +6,7 @@ import { createLlm, extractJson } from '../src/services/llm.js';
 import { isLikelyHallucination } from '../src/services/stt.js';
 
 const cfg = (over = {}) => ({
-  groq: { apiKey: 'g', sttModel: 'whisper-large-v3-turbo', sttLanguage: 'en', llmModel: 'llama-3.3-70b-versatile', llmFallbackModel: 'openai/gpt-oss-120b', ...over.groq },
+  groq: { apiKey: 'g', sttModel: 'whisper-large-v3-turbo', sttLanguage: 'en', llmModel: 'openai/gpt-oss-120b', llmFallbackModel: 'openai/gpt-oss-20b', ...over.groq },
   gemini: { apiKey: 'm', model: 'gemini-2.5-flash', ...over.gemini },
 });
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status });
@@ -55,7 +55,7 @@ test('llm router falls through groq primary -> groq fallback -> gemini', async (
   const llm = createLlm({ config: cfg(), groq, gemini, log: { warn() {} } });
   const out = await llm.chat({ system: 's', messages: [] });
   assert.equal(out.provider, 'gemini');
-  assert.deepEqual(calls, ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'gemini-2.5-flash']);
+  assert.deepEqual(calls, ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'gemini-2.5-flash']);
 });
 
 test('llm router prefers gemini when asked, and errors clearly with no keys', async () => {

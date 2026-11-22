@@ -43,11 +43,32 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
     const suppliedKey = req.get('x-interview-start-key');
     const startRequestKey = suppliedKey ? validStartKey(suppliedKey) : null;
     if (suppliedKey && !startRequestKey) throw err(400, 'Invalid interview start request key.');
-    const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
-      const s = await services(req), cfg = await configFor(req.body, s.repo);
-      return s.interviewer.start(cfg, { startRequestKey });
-    });
-    res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
+    const controller = new AbortController();
+    const abort = () => controller.abort(new DOMException('Client disconnected', 'AbortError'));
+    let timedOut = false;
+    // Leave a little time for Vercel to return the result before its client-side
+    // 90-second deadline, while still allowing a cold model a substantial window.
+    const deadline = setTimeout(() => { timedOut = true; controller.abort(new DOMException('Interviewer initialization exceeded 85 seconds', 'AbortError')); }, 85_000);
+    req.once('aborted', abort);
+    try {
+      const result = await starts.run(startRequestKey ? `${req.userId}:${startRequestKey}` : null, async () => {
+        const s = await services(req), cfg = await configFor(req.body, s.repo);
+        return s.interviewer.start(cfg, { startRequestKey, signal: controller.signal });
+      });
+      res.json({ interview: result.interview, message: result.reply, interviewer: result.interviewer || result.reply?.interviewer });
+    } catch (e) {
+      if (timedOut) {
+        throw Object.assign(new Error('The interviewer did not become ready in time. Please retry; no duplicate session was created.'), {
+          status: 504,
+          code: 'INTERVIEW_START_TIMEOUT',
+          publicMessage: 'The interviewer did not become ready in time. Please retry; no duplicate session was created.',
+        });
+      }
+      throw e;
+    } finally {
+      clearTimeout(deadline);
+      req.removeListener('aborted', abort);
+    }
   }));
   r.post('/interviews/:id/turn', wrap(async (req, res) => { const key = `${req.userId}:${req.params.id}`; if (busy.has(key)) throw err(409, 'The previous turn is still being processed.'); busy.add(key); try { const s = await services(req); res.json(await s.interviewer.turn(req.params.id, { text: req.body?.text, elapsedSec: Number(req.body?.elapsedSec) || 0 })); } finally { busy.delete(key); } }));
   for (const [path, from, to] of [['/interviews/:id/pause', 'active', 'paused'], ['/interviews/:id/resume', 'paused', 'active']]) r.post(path, wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status !== from) throw err(409, `Interview is ${interview.status}.`); await current.setStatus(interview.id, to); res.json({ ok: true, status: to }); }));

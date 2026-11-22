@@ -9,9 +9,9 @@ export const STT_VOCAB_PROMPT =
 
 export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
   const auth = (apiKey) => ({ Authorization: `Bearer ${apiKey || config.groq.apiKey}` });
-  const opts = (label) => ({ fetchImpl, sleep, label });
+  const opts = (label, request = {}) => ({ fetchImpl, sleep, label, ...request });
 
-  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey }) {
+  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey, signal, timeoutMs, retries }) {
     const body = {
       model,
       messages: [{ role: 'system', content: system }, ...messages],
@@ -23,8 +23,8 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
 
     const res = await fetchWithRetry(
       `${BASE}/chat/completions`,
-      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-      opts(`Groq ${model}`),
+      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
+      opts(`Groq ${model}`, { timeoutMs, retries }),
     );
     tracker?.record('groq', model, res.headers);
     const data = await res.json();

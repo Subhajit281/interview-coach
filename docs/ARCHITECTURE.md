@@ -7,7 +7,7 @@ Personal, voice-first AI technical interviewer. Reliable turn-based voice loop (
 | Role | Choice | Notes |
 |---|---|---|
 | Speech-to-text | Groq `whisper-large-v3-turbo` | Free plan: 20 RPM, 2,000 RPD, 7,200 audio-sec/hour, 28,800 audio-sec/day. Paid $0.04/hour, 10 s minimum billed per request. |
-| Interviewer LLM | Groq `llama-3.3-70b-versatile`, fallback `openai/gpt-oss-120b`, then Gemini Flash | Groq free text-model caps are per model (roughly 1,000 requests/day, 8-12K tokens/min reported). Separate quotas per model make the fallback useful. |
+| Interviewer LLM | Groq `openai/gpt-oss-120b`, fallback `openai/gpt-oss-20b`, then Gemini Flash | Groq free text-model caps are per model. Separate quotas per model make the fallback useful. |
 | Reports | Gemini Flash first, Groq as fallback | One call per interview. Gemini free quotas vary by model/account; view yours in AI Studio. |
 | TTS | Browser SpeechSynthesis | Free, instant. Upgrade path: Groq Orpheus or Gemini TTS. |
 | Gemini Live API | Not used | Free quotas for Live/native audio are tiny and unstable; revisit if the turn-based loop feels slow. |

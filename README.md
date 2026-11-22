@@ -44,7 +44,7 @@ After each report, per-topic scores are stored. New interviews weight weaker and
 Browser: mic + silence detection -> POST /api/transcribe -> Groq Whisper
          text -> POST /api/interviews/:id/turn -> interviewer engine -> LLM chain
          reply (JSON: say, board, topic...) -> browser SpeechSynthesis
-LLM chain (interview turns): Groq llama-3.3-70b -> Groq gpt-oss-120b -> Gemini Flash
+LLM chain (interview turns): Groq GPT-OSS 120B -> Groq GPT-OSS 20B -> Gemini Flash
 LLM chain (reports):         Gemini Flash -> Groq models
 ```
 

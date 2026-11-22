@@ -3,11 +3,8 @@
 // Free-tier limits change often: trust each provider's console for exact numbers.
 export const MODEL_CATALOG = {
   groq: [
-    { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', note: 'Best all-round quality on Groq' },
-    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Strong reasoning, own daily quota' },
-    { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Fast, good reasoning, own daily quota' },
-    { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B', note: 'Fast, separate daily quota' },
-    { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', note: 'Fastest and lightest, larger daily allowance' },
+    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Best all-round quality on Groq' },
+    { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Fast, good reasoning, separate quota' },
   ],
   gemini: [
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: 'Best all-round quality on Gemini' },
@@ -18,6 +15,7 @@ export const MODEL_CATALOG = {
 };
 
 export const PROVIDER_LABEL = { groq: 'Groq', gemini: 'Gemini' };
+const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct']);
 
 const fail = (message, code, extra = {}) => Object.assign(new Error(message), { status: 400, code, publicMessage: message, ...extra });
 
@@ -58,6 +56,9 @@ export function parseModelPrefs(config, headerValue) {
   for (const p of Object.keys(MODEL_CATALOG)) {
     const m = typeof raw[p] === 'string' ? raw[p].trim() : '';
     if (!m) continue;
+    // Browser preferences survive deployments. Silently fall back to the new
+    // server default when that stored Groq model was retired.
+    if (p === 'groq' && RETIRED_GROQ_MODELS.has(m)) continue;
     assertAllowedModel(config, p, m);
     out[p] = m;
   }

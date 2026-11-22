@@ -67,12 +67,12 @@ export function createInterviewer({ repo, llm, credentials = null }) {
   // Per-thread state: follow-ups since the last brand-new question and the recent satisfaction scores.
   const threadById = new Map();
 
-  async function ask(system, messages) {
-    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6, credentials });
+  async function ask(system, messages, request = {}) {
+    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6, credentials, ...request });
     return { res, reply: parseInterviewerReply(res.text) };
   }
 
-  async function generate(interviewId, elapsedSec = 0) {
+  async function generate(interviewId, elapsedSec = 0, request = {}) {
     const iv = await repo.getInterview(interviewId);
     const mode = MODES[iv.mode];
     const history = await repo.getMessages(interviewId, 20);
@@ -110,7 +110,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       ? toLlmMessages(history)
       : [{ role: 'user', content: '[The interview begins. Introduce yourself professionally in one sentence, state the format briefly, and ask your first question according to the plan.]' }];
 
-    let { res, reply } = await ask(system, messages);
+    let { res, reply } = await ask(system, messages, request);
 
     // Guardrails: up to two corrective retries when the model closes early, skips the counter-question or judges without evidence.
     const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
@@ -140,7 +140,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       if (!c) break;
       corrections += `\n\nCORRECTION: ${c}`;
       try {
-        const retry = await ask(`${system}${corrections}`, messages);
+        const retry = await ask(`${system}${corrections}`, messages, request);
         if (retry.reply.say || retry.reply.verdict === 'stray') { res = retry.res; reply = retry.reply; } else break;
       } catch { break; /* keep the previous reply */ }
     }
@@ -176,7 +176,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model };
   }
 
-  async function start(cfg, { startRequestKey = null } = {}) {
+  async function start(cfg, { startRequestKey = null, signal } = {}) {
     const created = repo.createOrGetInterview
       ? await repo.createOrGetInterview({ ...cfg, startRequestKey })
       : { id: await repo.createInterview(cfg), created: true };
@@ -191,7 +191,9 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       throw Object.assign(new Error('Your interview is still being initialized. Please keep this page open and retry shortly.'), { status: 409, code: 'START_IN_PROGRESS' });
     }
     try {
-      const reply = await generate(interviewId, 0);
+      // A first question is intentionally quick: the browser has a 90 s
+      // connection window, so one provider should not consume it all.
+      const reply = await generate(interviewId, 0, { signal, timeoutMs: 15_000, retries: 1 });
       // Sessions created through the idempotent production path are only active
       // once their first interviewer message exists.
       await repo.setStatus(interviewId, 'active');

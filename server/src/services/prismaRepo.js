@@ -4,20 +4,49 @@ const question = (x) => ({ ...x, interview_id: x.sessionId, title: x.question, m
 
 export function createPrismaRepo(prisma, userId) {
   const own = (id) => ({ id, userId });
+  // A deployment should always run `prisma generate`, but retaining a safe
+  // in-memory fallback avoids taking the whole interview flow down if a host
+  // briefly runs code newer than its generated Prisma client.
+  let supportsStartRequestKey = true;
+  const staleClientError = (e) => e?.name === 'PrismaClientValidationError' && /Unknown argument [`']?startRequestKey/i.test(e.message || '');
+  const createSession = async (c, withStartKey) => prisma.interviewSession.create({ data: {
+    userId, projectId: c.projectId || null, ...(withStartKey ? { startRequestKey: c.startRequestKey } : {}),
+    title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position,
+    round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty,
+    model: 'automatic', durationSec: c.durationMin * 60, status: withStartKey ? 'initializing' : 'active',
+  } });
   return {
     async addProject(name, description) { return (await prisma.interviewProject.create({ data: { userId, name, description } })).id; },
     async listProjects() { return (await prisma.interviewProject.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map((p) => ({ ...p, preview: p.description.slice(0, 200), created_at: p.createdAt })); },
     async getProject(id) { return prisma.interviewProject.findFirst({ where: { id, userId } }); },
     async deleteProject(id) { return prisma.interviewProject.deleteMany({ where: own(id) }); },
     async createOrGetInterview(c) {
+      if (!c.startRequestKey || !supportsStartRequestKey) {
+        const row = await createSession(c, false);
+        return { id: row.id, created: true };
+      }
       if (c.startRequestKey) {
-        const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
-        if (existing) return { id: existing.id, created: false };
+        try {
+          const existing = await prisma.interviewSession.findFirst({ where: { userId, startRequestKey: c.startRequestKey } });
+          if (existing) return { id: existing.id, created: false };
+        } catch (e) {
+          if (!staleClientError(e)) throw e;
+          supportsStartRequestKey = false;
+          console.error('[idempotency] Prisma client is stale; using single-process start protection until redeploy.');
+          const row = await createSession(c, false);
+          return { id: row.id, created: true };
+        }
       }
       try {
-        const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, startRequestKey: c.startRequestKey || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60, status: c.startRequestKey ? 'initializing' : 'active' } });
+        const row = await createSession(c, true);
         return { id: row.id, created: true };
       } catch (e) {
+        if (staleClientError(e)) {
+          supportsStartRequestKey = false;
+          console.error('[idempotency] Prisma client is stale; using single-process start protection until redeploy.');
+          const row = await createSession(c, false);
+          return { id: row.id, created: true };
+        }
         // A second Render worker can race the pre-read. The unique key makes it
         // return the original row instead of creating a second interview.
         if (c.startRequestKey && e?.code === 'P2002') {
@@ -28,7 +57,7 @@ export function createPrismaRepo(prisma, userId) {
       }
     },
     async createInterview(c) {
-      const row = await prisma.interviewSession.create({ data: { userId, projectId: c.projectId || null, title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position, round: c.round || '', style: c.style || 'standard', personality: c.personality, difficulty: c.difficulty, model: 'automatic', durationSec: c.durationMin * 60 } });
+      const row = await createSession(c, false);
       return row.id;
     },
     async getInterview(id) { return session(await prisma.interviewSession.findFirst({ where: own(id) })); },

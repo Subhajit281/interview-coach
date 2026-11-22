@@ -7,7 +7,7 @@ import { parseModelPrefs, catalogFor, MODEL_CATALOG } from '../src/data/models.j
 
 const cfg = (over = {}) => ({
   allowDevelopmentProviderKeys: false,
-  groq: { llmModel: 'llama-3.3-70b-versatile', llmFallbackModel: 'openai/gpt-oss-120b' },
+  groq: { llmModel: 'openai/gpt-oss-120b', llmFallbackModel: 'openai/gpt-oss-20b' },
   gemini: { model: 'gemini-2.5-flash' },
   ...over,
 });
@@ -24,9 +24,9 @@ test('classify separates limits, bad keys and missing models; plain errors stay 
 
 test('chosen model replaces the default and its hidden fallback', () => {
   const llm = createLlm({ config: cfg(), groq: {}, gemini: {} });
-  const chain = llm.chainFor('groq', keys({ models: { groq: 'llama-3.1-8b-instant' } }));
-  assert.deepEqual(chain.map((s) => s.model), ['llama-3.1-8b-instant']);
-  assert.deepEqual(llm.chainFor('groq', keys()).map((s) => s.model), ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b']);
+  const chain = llm.chainFor('groq', keys({ models: { groq: 'openai/gpt-oss-20b' } }));
+  assert.deepEqual(chain.map((s) => s.model), ['openai/gpt-oss-20b']);
+  assert.deepEqual(llm.chainFor('groq', keys()).map((s) => s.model), ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
 });
 
 test('daily limit on the default model raises a readable MODEL_LIMIT error and skips the silent backup', async () => {
@@ -37,12 +37,12 @@ test('daily limit on the default model raises a readable MODEL_LIMIT error and s
     assert.equal(e.code, 'MODEL_LIMIT');
     assert.equal(e.status, 429);
     assert.equal(e.provider, 'groq');
-    assert.equal(e.model, 'llama-3.3-70b-versatile');
+    assert.equal(e.model, 'openai/gpt-oss-120b');
     assert.match(e.publicMessage, /free limit for today/);
     assert.doesNotMatch(e.publicMessage, /HTTP|429|TPD/);
     return true;
   });
-  assert.deepEqual(calls, ['llama-3.3-70b-versatile']);
+  assert.deepEqual(calls, ['openai/gpt-oss-120b']);
 });
 
 test('the other provider still takes over when the user has both keys', async () => {
@@ -61,7 +61,7 @@ test('probe and friendly turn a rejected model into a coded error', async () => 
 
 test('model prefs only accept ids from the dropdown list', () => {
   const c = cfg();
-  assert.deepEqual(parseModelPrefs(c, JSON.stringify({ groq: 'llama-3.1-8b-instant', gemini: 'gemini-2.0-flash' })), { groq: 'llama-3.1-8b-instant', gemini: 'gemini-2.0-flash' });
+  assert.deepEqual(parseModelPrefs(c, JSON.stringify({ groq: 'llama-3.1-8b-instant', gemini: 'gemini-2.0-flash' })), { gemini: 'gemini-2.0-flash' });
   assert.deepEqual(parseModelPrefs(c, undefined), {});
   assert.deepEqual(parseModelPrefs(c, 'not json'), {});
   assert.throws(() => parseModelPrefs(c, JSON.stringify({ groq: 'made-up-model' })), (e) => e.code === 'MODEL_INVALID' && /dropdown/.test(e.publicMessage));
@@ -72,7 +72,7 @@ test('HTTP: a hit limit reaches the browser as a readable, coded error with no p
   const { openDb } = await import('../src/db/index.js');
   const { createApp } = await import('../src/app.js');
   const { modelError } = await import('../src/services/providerErrors.js');
-  const llm = { chat: async () => { throw modelError('limit', [{ provider: 'groq', model: 'llama-3.3-70b-versatile', kind: 'limit', daily: true }]); } };
+  const llm = { chat: async () => { throw modelError('limit', [{ provider: 'groq', model: 'openai/gpt-oss-120b', kind: 'limit', daily: true }]); } };
   const server = createApp({ db: openDb(':memory:'), llm, stt: {} }).listen(0);
   try {
     const res = await fetch(`http://127.0.0.1:${server.address().port}/api/interviews`, {
