@@ -16,6 +16,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [credentials, setCredentials] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
+  const [introLoading, setIntroLoading] = useState(true);
 
   // In-app confirmation dialog states (no native browser alerts)
   const [leaveTarget, setLeaveTarget] = useState(null);
@@ -24,6 +25,11 @@ export default function App() {
 
   // Initialize session and prefetch metadata concurrently to minimize loading wait time
   useEffect(() => {
+    // Intentionally show equalizer animation page for 2.5 seconds on initial load
+    const timer = setTimeout(() => {
+      setIntroLoading(false);
+    }, 2500);
+
     let active = true;
     api.refresh()
       .then(() => api.me())
@@ -39,7 +45,10 @@ export default function App() {
       .finally(() => {
         if (active) setAuthChecking(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   // Fetch or refresh meta when credentials change
@@ -69,8 +78,8 @@ export default function App() {
     setMeta(null);
   };
 
-  // Initial loading state with voice equalizer bars animation (no text)
-  if (authChecking) {
+  // Initial loading state with voice equalizer bars animation (intentionally shows for 2-3 seconds)
+  if (authChecking || introLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#050806]">
         <EqualizerLoader size="lg" />
