@@ -15,7 +15,7 @@ export function toContents(messages) {
 }
 
 export function createGemini({ config, fetchImpl = fetch, sleep }) {
-  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7 }) {
+  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey }) {
     const generationConfig = { temperature, maxOutputTokens: maxTokens };
     if (json) generationConfig.responseMimeType = 'application/json';
     // Skip "thinking" on 2.5 Flash for low latency; the interviewer turn does not need it.
@@ -25,7 +25,7 @@ export function createGemini({ config, fetchImpl = fetch, sleep }) {
       `${BASE}/${model}:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.gemini.apiKey },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey || config.gemini.apiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: toContents(messages),

@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id String @id @default(uuid())
+  name String
+  email String @unique
+  passwordHash String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  apiCredential UserApiCredential?
+  refreshTokens RefreshToken[]
+  projects InterviewProject[]
+  sessions InterviewSession[]
+  analytics InterviewAnalytics[]
+  topicStats TopicStat[]
+}
+
+model UserApiCredential {
+  id String @id @default(uuid())
+  userId String @unique
+  encryptedGeminiKey Json?
+  encryptedGroqKey Json?
+  geminiConfigured Boolean @default(false)
+  groqConfigured Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id String @id @default(uuid())
+  userId String
+  tokenHash String @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revoked Boolean @default(false)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model InterviewProject {
+  id String @id @default(uuid())
+  userId String
+  name String
+  description String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions InterviewSession[]
+  @@index([userId, createdAt])
+}
+
+model InterviewSession {
+  id String @id @default(uuid())
+  userId String
+  projectId String?
+  title String
+  type String
+  company String
+  position String
+  round String @default("")
+  style String @default("standard")
+  personality String @default("real")
+  difficulty String?
+  model String
+  durationSec Int?
+  status String @default("active")
+  startTime DateTime @default(now())
+  endTime DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project InterviewProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages InterviewMessage[]
+  questions InterviewQuestion[]
+  responses InterviewResponse[]
+  analytics InterviewAnalytics?
+  @@index([userId, createdAt])
+  @@index([userId, status])
+}
+
+model InterviewMessage {
+  id String @id @default(uuid())
+  sessionId String
+  role String
+  content String
+  board String?
+  meta Json?
+  createdAt DateTime @default(now())
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId, createdAt])
+}
+
+model InterviewQuestion {
+  id String @id @default(uuid())
+  sessionId String
+  question String
+  questionType String?
+  sequenceNumber Int
+  topic String?
+  difficulty String?
+  hintsUsed Int @default(0)
+  solved Boolean @default(false)
+  createdAt DateTime @default(now())
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  responses InterviewResponse[]
+  @@unique([sessionId, sequenceNumber])
+  @@index([sessionId, createdAt])
+}
+
+model InterviewResponse {
+  id String @id @default(uuid())
+  sessionId String
+  questionId String?
+  messageId String? @unique
+  userResponse String?
+  aiFeedback String?
+  score Float?
+  durationMs Int?
+  createdAt DateTime @default(now())
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question InterviewQuestion? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  @@index([sessionId, createdAt])
+}
+
+model InterviewAnalytics {
+  id String @id @default(uuid())
+  userId String
+  sessionId String @unique
+  overallScore Float?
+  communicationScore Float?
+  technicalScore Float?
+  confidenceScore Float?
+  strengths Json?
+  weaknesses Json?
+  improvementSuggestions Json?
+  report Json
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+}
+
+model TopicStat {
+  id String @id @default(uuid())
+  userId String
+  topic String
+  attempts Int @default(0)
+  average Float @default(0)
+  hintsTotal Int @default(0)
+  lastSeen DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, topic])
+  @@index([userId, topic])
+}

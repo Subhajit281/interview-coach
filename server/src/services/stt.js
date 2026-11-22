@@ -20,8 +20,9 @@ export function isPromptEcho(text) {
 
 export function createStt({ config, groq, tracker }) {
   return {
-    async transcribe({ buffer, mime, durationSec = 0, voicedSec = null }) {
-      if (!config.groq.apiKey) {
+    async transcribe({ buffer, mime, durationSec = 0, voicedSec = null, apiKey }) {
+      const key = apiKey || ((config.allowDevelopmentProviderKeys ?? true) ? config.groq.apiKey : '');
+      if (!key) {
         throw new ProviderError('Speech recognition needs GROQ_API_KEY. Type your answer instead.', 503);
       }
       if (!buffer || buffer.length < 1000) return ''; // too small to contain speech
@@ -29,7 +30,7 @@ export function createStt({ config, groq, tracker }) {
       mime = String(mime || 'audio/webm').split(';')[0].trim() || 'audio/webm';
       tracker?.recordStt(durationSec);
       const ext = /mp4|m4a/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : 'webm';
-      const out = await groq.transcribe({ buffer, mime, filename: `audio.${ext}` });
+      const out = await groq.transcribe({ buffer, mime, filename: `audio.${ext}`, apiKey: key });
       const text = typeof out === 'string' ? out : out.text;
       if (typeof out === 'object' && out.noSpeech) return ''; // Whisper itself says this is not speech
       if (isLikelyHallucination(text, durationSec)) return '';

@@ -87,18 +87,18 @@ export function buildTranscript(messages, maxChars = 30000) {
   return text;
 }
 
-export function createEvaluator({ repo, llm }) {
+export function createEvaluator({ repo, llm, credentials = null }) {
   async function evaluate(interviewId) {
-    const iv = repo.getInterview(interviewId);
-    const messages = repo.getMessages(interviewId);
+    const iv = await repo.getInterview(interviewId);
+    const messages = await repo.getMessages(interviewId);
     const candidateTurns = messages.filter((m) => m.role === 'candidate').length;
     const header =
       `Interview: ${iv.mode}, company style ${iv.company}, ${iv.position}, difficulty ${iv.difficulty}, personality ${iv.personality}, ` +
       `${Math.round(iv.elapsed_sec / 60)} of ${iv.duration_min} min used, ${candidateTurns} candidate turns.\n` +
-      `Questions asked: ${repo.questionsFor(interviewId).map((q) => q.title).join('; ') || 'unknown'}\n\nTRANSCRIPT:\n`;
+      `Questions asked: ${(await repo.questionsFor(interviewId)).map((q) => q.title).join('; ') || 'unknown'}\n\nTRANSCRIPT:\n`;
 
     const input = [{ role: 'user', content: header + buildTranscript(messages) }];
-    const call = (system, key) => llm.chat({ prefer: 'gemini', system, messages: input, json: true, maxTokens: 7000, temperature: 0.2, dedupeKey: `eval:${key}:${interviewId}` });
+    const call = (system, key) => llm.chat({ prefer: 'gemini', system, messages: input, json: true, maxTokens: 7000, temperature: 0.2, dedupeKey: `eval:${key}:${interviewId}`, credentials });
     // Two smaller calls in parallel are faster and far less likely to be cut off than one huge JSON document.
     const [main, qs] = await Promise.allSettled([call(EVAL_SYSTEM, 'main'), call(EVAL_QUESTIONS_SYSTEM, 'questions')]);
     if (main.status === 'rejected') throw main.reason;
@@ -111,12 +111,12 @@ export function createEvaluator({ repo, llm }) {
     else report.breakdown_missing = true;
     report.evaluated_by = `${res.provider}/${res.model}`;
 
-    repo.saveReport(interviewId, report.overall_score, report.categories, report);
-    for (const t of report.topic_scores) repo.upsertTopicStat(`${iv.mode}:${t.topic}`, t.score, t.hints_used);
-    const asked = repo.questionsFor(interviewId);
+    await repo.saveReport(interviewId, report.overall_score, report.categories, report);
+    for (const t of report.topic_scores) await repo.upsertTopicStat(`${iv.mode}:${t.topic}`, t.score, t.hints_used);
+    const asked = await repo.questionsFor(interviewId);
     for (const r of report.question_results) {
       const match = asked.find((q) => q.title.toLowerCase() === r.title.toLowerCase());
-      if (match) repo.setQuestionResult(match.id, r.solved, r.hints_used);
+      if (match) await repo.setQuestionResult(match.id, r.solved, r.hints_used);
     }
     return repo.getReport(interviewId);
   }

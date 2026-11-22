@@ -51,13 +51,13 @@ export default function Configure({ meta, onStart, onCancel }) {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <Card title="Interview configuration">
-        {!meta.providers.groq && (
+        {!meta.providers.groqConfigured && (
           <p className="mb-4 rounded border border-amber-900 bg-amber-950/40 p-2 text-sm text-amber-200">
-            GROQ_API_KEY is not set, so voice transcription is off. You can still type answers.
+            A Groq key is not configured, so voice transcription is off. You can still type answers.
           </p>
         )}
-        {!meta.providers.groq && !meta.providers.gemini && (
-          <p className="mb-4 rounded border border-red-900 bg-red-950/40 p-2 text-sm text-red-200">No LLM key is configured. Add GROQ_API_KEY and/or GEMINI_API_KEY to .env and restart the server.</p>
+        {!meta.providers.groqConfigured && !meta.providers.geminiConfigured && (
+          <p className="mb-4 rounded border border-red-900 bg-red-950/40 p-2 text-sm text-red-200">No AI provider key is configured. Open Settings to connect Gemini or Groq.</p>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Sel k="mode" label="Interview mode" options={meta.modes.map((m) => ({ value: m.id, label: m.label }))} />

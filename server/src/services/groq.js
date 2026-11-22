@@ -8,10 +8,10 @@ export const STT_VOCAB_PROMPT =
   'mutex, semaphore, deadlock, paging, TCP, B-tree, ACID, CAP theorem, sharding, load balancer, Redis, Kafka, SQL, CTE.';
 
 export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
-  const auth = () => ({ Authorization: `Bearer ${config.groq.apiKey}` });
+  const auth = (apiKey) => ({ Authorization: `Bearer ${apiKey || config.groq.apiKey}` });
   const opts = (label) => ({ fetchImpl, sleep, label });
 
-  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7 }) {
+  async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey }) {
     const body = {
       model,
       messages: [{ role: 'system', content: system }, ...messages],
@@ -23,7 +23,7 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
 
     const res = await fetchWithRetry(
       `${BASE}/chat/completions`,
-      { method: 'POST', headers: { ...auth(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
       opts(`Groq ${model}`),
     );
     tracker?.record('groq', model, res.headers);
@@ -31,7 +31,7 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
     return { text: data.choices?.[0]?.message?.content ?? '', provider: 'groq', model };
   }
 
-  async function transcribe({ buffer, mime = 'audio/webm', filename = 'audio.webm' }) {
+  async function transcribe({ buffer, mime = 'audio/webm', filename = 'audio.webm', apiKey }) {
     const form = new FormData();
     form.append('file', new Blob([buffer], { type: mime }), filename);
     form.append('model', config.groq.sttModel);
@@ -41,7 +41,7 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
     form.append('prompt', STT_VOCAB_PROMPT);
     const res = await fetchWithRetry(
       `${BASE}/audio/transcriptions`,
-      { method: 'POST', headers: auth(), body: form },
+      { method: 'POST', headers: auth(apiKey), body: form },
       opts('Groq transcription'),
     );
     const data = await res.json();

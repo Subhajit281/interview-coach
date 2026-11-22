@@ -61,33 +61,33 @@ export function parseInterviewerReply(raw) {
   };
 }
 
-export function createInterviewer({ repo, llm }) {
+export function createInterviewer({ repo, llm, credentials = null }) {
   // Consecutive turns without a usable answer. In memory is fine for a personal tool.
   const strikesById = new Map();
   // Per-thread state: follow-ups since the last brand-new question and the recent satisfaction scores.
   const threadById = new Map();
 
   async function ask(system, messages) {
-    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6 });
+    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6, credentials });
     return { res, reply: parseInterviewerReply(res.text) };
   }
 
   async function generate(interviewId, elapsedSec = 0) {
-    const iv = repo.getInterview(interviewId);
+    const iv = await repo.getInterview(interviewId);
     const mode = MODES[iv.mode];
-    const history = repo.getMessages(interviewId, 20);
-    const asked = repo.interviewQuestions(interviewId);
+    const history = await repo.getMessages(interviewId, 20);
+    const asked = await repo.interviewQuestions(interviewId);
     const thread = threadById.get(interviewId) || { followups: 0, sat: [] };
     const cap = FOLLOWUP_CAP[iv.style] || 3;
     const min = Math.min(MIN_PROBES[iv.style] ?? 2, cap);
     // The seed changes with every new question, so the topic focus rotates instead of staying fixed all interview.
     const rng = seededRng(interviewId * 7919 + asked.length * 131);
-    const focusTopics = pickFocus(mode.topics, repo.topicStats(iv.mode), iv.mode, 3, rng);
+    const focusTopics = pickFocus(mode.topics, await repo.topicStats(iv.mode), iv.mode, 3, rng);
     // Blueprint for the next main question: a fresh theme (rotated across past interviews), an angle and a difficulty level.
     const sessionSeeds = history.map(parseMeta).map((m) => m?.seed).filter(Boolean);
     const blueprint = pickBlueprint({
       mode: iv.mode, company: iv.company, difficulty: iv.difficulty, askedCount: asked.length, sat: thread.sat,
-      recentSeeds: repo.recentSeeds(iv.mode, 150), sessionSeeds,
+      recentSeeds: await repo.recentSeeds(iv.mode, 150), sessionSeeds,
       rng: seededRng(interviewId * 104729 + asked.length * 7919 + history.length * 31 + 17),
     });
     const plan = { total: planQuestions({ durationMin: iv.duration_min, style: iv.style, mode: iv.mode }), asked: asked.length };
@@ -96,9 +96,9 @@ export function createInterviewer({ repo, llm }) {
       focusTopics,
       blueprint,
       plan,
-      askedTitles: repo.recentQuestionTitles(iv.mode, 40).map((t) => t.slice(0, 90)),
-      weaknesses: repo.recentWeaknesses(3, 6, iv.mode),
-      project: iv.project_id ? repo.getProject(iv.project_id) : null,
+      askedTitles: (await repo.recentQuestionTitles(iv.mode, 40)).map((t) => t.slice(0, 90)),
+      weaknesses: await repo.recentWeaknesses(3, 6, iv.mode),
+      project: iv.project_id ? await repo.getProject(iv.project_id) : null,
       elapsedSec,
       strikes: strikesById.get(interviewId) || 0,
       maxStrikes: MAX_STRIKES,
@@ -149,7 +149,7 @@ export function createInterviewer({ repo, llm }) {
 
     // Stray input that slipped past the filter: drop it silently, change nothing.
     if (lastCand && lastCand.content !== NO_RESPONSE && reply.verdict === 'stray') {
-      repo.deleteMessage(lastCand.id);
+      await repo.deleteMessage(lastCand.id);
       return { ignored: true, say: '', board: '', strikes: strikesById.get(interviewId) || 0, provider: res.provider, model: res.model };
     }
 
@@ -166,41 +166,41 @@ export function createInterviewer({ repo, llm }) {
 
     // The theme is recorded with the question so later interviews rotate away from it.
     const seed = reply.newQuestion && blueprint.seed ? blueprint.seed : undefined;
-    repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict || seed ? { analysis: reply.analysis, verdict: reply.verdict, seed } : null);
+    await repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict || seed ? { analysis: reply.analysis, verdict: reply.verdict, seed } : null);
     if (reply.newQuestion && reply.questionTitle) {
-      repo.addQuestion(interviewId, iv.mode, reply.topic, reply.questionTitle, iv.difficulty);
+      await repo.addQuestion(interviewId, iv.mode, reply.topic, reply.questionTitle, iv.difficulty);
     }
-    if (reply.hintGiven) repo.bumpHint(interviewId);
+    if (reply.hintGiven) await repo.bumpHint(interviewId);
     const { analysis, ...publicReply } = reply;
     return { ...publicReply, strikes, provider: res.provider, model: res.model };
   }
 
   async function start(cfg) {
-    const interviewId = repo.createInterview(cfg);
+    const interviewId = await repo.createInterview(cfg);
     try {
       const reply = await generate(interviewId, 0);
-      return { interview: repo.getInterview(interviewId), reply };
+      return { interview: await repo.getInterview(interviewId), reply };
     } catch (e) {
-      repo.deleteInterview(interviewId);
+      await repo.deleteInterview(interviewId);
       throw e;
     }
   }
 
   async function turn(interviewId, { text, elapsedSec = 0 }) {
-    const iv = repo.getInterview(interviewId);
+    const iv = await repo.getInterview(interviewId);
     if (!iv) throw Object.assign(new Error('Interview not found'), { status: 404 });
     if (iv.status === 'paused') throw Object.assign(new Error('Interview is paused. Resume it first.'), { status: 409 });
     if (iv.status !== 'active') throw Object.assign(new Error('Interview has ended.'), { status: 409 });
 
     const clean = (text || '').trim();
     if (clean === NO_RESPONSE) {
-      repo.addMessage(interviewId, 'candidate', NO_RESPONSE);
+      await repo.addMessage(interviewId, 'candidate', NO_RESPONSE);
     } else if (clean) {
       // A lone "terminate", "okay" or a transcription artefact is not an answer: never let it reach the interviewer.
       if (isStrayInput(clean)) return { ignored: true, say: '', board: '', strikes: strikesById.get(interviewId) || 0 };
-      repo.addMessage(interviewId, 'candidate', clean.slice(0, 8000));
+      await repo.addMessage(interviewId, 'candidate', clean.slice(0, 8000));
     } else {
-      const last = repo.lastMessage(interviewId);
+      const last = await repo.lastMessage(interviewId);
       if (!last || last.role !== 'candidate') throw Object.assign(new Error('Nothing to respond to.'), { status: 400 });
     }
     try {

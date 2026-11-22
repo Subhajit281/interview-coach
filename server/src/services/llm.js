@@ -4,27 +4,30 @@ import { ProviderError } from './http.js';
 export function createLlm({ config, groq, gemini, log = console }) {
   const inflight = new Map();
 
-  function chainFor(prefer) {
+  function chainFor(prefer, credentials = null) {
     const g = [];
-    if (config.groq.apiKey) {
-      g.push({ provider: 'groq', model: config.groq.llmModel });
+    const allowServerKeys = config.allowDevelopmentProviderKeys ?? true;
+    const groqKey = credentials?.groqKey || (allowServerKeys ? config.groq.apiKey : '');
+    const geminiKey = credentials?.geminiKey || (allowServerKeys ? config.gemini.apiKey : '');
+    if (groqKey) {
+      g.push({ provider: 'groq', model: config.groq.llmModel, apiKey: groqKey });
       if (config.groq.llmFallbackModel && config.groq.llmFallbackModel !== config.groq.llmModel) {
-        g.push({ provider: 'groq', model: config.groq.llmFallbackModel });
+        g.push({ provider: 'groq', model: config.groq.llmFallbackModel, apiKey: groqKey });
       }
     }
-    const m = config.gemini.apiKey ? [{ provider: 'gemini', model: config.gemini.model }] : [];
+    const m = geminiKey ? [{ provider: 'gemini', model: config.gemini.model, apiKey: geminiKey }] : [];
     return prefer === 'gemini' ? [...m, ...g] : [...g, ...m];
   }
 
   async function run({ prefer = 'groq', ...req }) {
-    const chain = chainFor(prefer);
+    const chain = chainFor(prefer, req.credentials);
     if (!chain.length) {
       throw new ProviderError('No LLM provider configured. Set GROQ_API_KEY and/or GEMINI_API_KEY in .env.', 503);
     }
     const errors = [];
     for (const step of chain) {
       try {
-        return await (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model });
+        return await (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model, apiKey: step.apiKey });
       } catch (e) {
         errors.push(`${step.provider}/${step.model}: ${e.message}`);
         log.warn?.(`[llm] ${step.provider}/${step.model} failed, trying next: ${e.message}`);
