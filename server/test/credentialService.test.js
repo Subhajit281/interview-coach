@@ -19,3 +19,26 @@ test('readable saved provider keys remain configured', async () => {
   assert.deepEqual(await service.status('user'), { geminiConfigured: false, groqConfigured: true, credentialResetRequired: false });
   assert.equal((await service.resolve('user')).groqKey, 'gsk_key');
 });
+
+test('model catalog is built from models available to the saved provider keys', async () => {
+  const prisma = { userApiCredential: { findUnique: async () => ({
+    geminiConfigured: true, groqConfigured: true,
+    encryptedGeminiKey: encryptSecret('gem_key', config.encryptionSecret),
+    encryptedGroqKey: encryptSecret('gsk_key', config.encryptionSecret),
+  }) } };
+  const fetchImpl = async (url) => {
+    const body = url.includes('api.groq.com')
+      ? { data: [{ id: 'openai/gpt-oss-20b' }, { id: 'whisper-large-v3' }] }
+      : { models: [
+      { name: 'models/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] },
+      ] };
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const service = createCredentialService({ prisma, config, fetchImpl });
+
+  assert.deepEqual(await service.modelCatalog('catalog-user'), {
+    groq: [{ id: 'openai/gpt-oss-20b', label: 'Openai Gpt Oss 20b', note: 'Available with your Groq key' }],
+    gemini: [{ id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', note: 'Available with your Gemini key' }],
+  });
+});

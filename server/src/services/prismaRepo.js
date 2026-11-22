@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 const session = (x) => x && ({ ...x, duration_min: Math.round((x.durationSec || 0) / 60), elapsed_sec: x.durationSec || 0, started_at: x.startTime, ended_at: x.endTime, mode: x.type, project_id: x.projectId });
 const message = (x) => ({ ...x, interview_id: x.sessionId, meta: x.meta ? JSON.stringify(x.meta) : null, created_at: x.createdAt });
 const question = (x) => ({ ...x, interview_id: x.sessionId, title: x.question, mode: x.questionType, hints_used: x.hintsUsed, asked_at: x.createdAt });
@@ -8,7 +10,13 @@ export function createPrismaRepo(prisma, userId) {
   // in-memory fallback avoids taking the whole interview flow down if a host
   // briefly runs code newer than its generated Prisma client.
   let supportsStartRequestKey = true;
+  // Do not use a generated-client field for this switch. Render can briefly
+  // start new application code with an older generated Prisma client; raw SQL
+  // still works against an already-migrated database and avoids an outage.
+  let supportsPurgeFlag = true;
+  let processPurgeRequired = false;
   const staleClientError = (e) => e?.name === 'PrismaClientValidationError' && /Unknown argument [`']?startRequestKey/i.test(e.message || '');
+  const missingPurgeFlag = (e) => /interviewPurgeRequired|column .*does not exist/i.test(e?.message || '');
   const createSession = async (c, withStartKey) => prisma.interviewSession.create({ data: {
     userId, projectId: c.projectId || null, ...(withStartKey ? { startRequestKey: c.startRequestKey } : {}),
     title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position,
@@ -17,14 +25,28 @@ export function createPrismaRepo(prisma, userId) {
   } });
   return {
     async interviewRetention() {
-      const [total, user] = await Promise.all([
-        prisma.interviewSession.count({ where: { userId } }),
-        prisma.user.findUnique({ where: { id: userId }, select: { interviewPurgeRequired: true } }),
-      ]);
-      return { total, purgeRequired: Boolean(user?.interviewPurgeRequired) };
+      const total = await prisma.interviewSession.count({ where: { userId } });
+      if (!supportsPurgeFlag) return { total, purgeRequired: processPurgeRequired };
+      try {
+        const rows = await prisma.$queryRaw(Prisma.sql`SELECT "interviewPurgeRequired" FROM "User" WHERE "id" = ${userId}`);
+        processPurgeRequired = Boolean(rows[0]?.interviewPurgeRequired);
+      } catch (e) {
+        if (!missingPurgeFlag(e)) throw e;
+        supportsPurgeFlag = false;
+        console.error('[retention] Interview-purge migration is not available yet; using temporary in-process protection until deploy completes.');
+      }
+      return { total, purgeRequired: processPurgeRequired };
     },
     async setInterviewPurgeRequired(purgeRequired) {
-      await prisma.user.update({ where: { id: userId }, data: { interviewPurgeRequired: Boolean(purgeRequired) } });
+      processPurgeRequired = Boolean(purgeRequired);
+      if (!supportsPurgeFlag) return;
+      try {
+        await prisma.$executeRaw(Prisma.sql`UPDATE "User" SET "interviewPurgeRequired" = ${processPurgeRequired} WHERE "id" = ${userId}`);
+      } catch (e) {
+        if (!missingPurgeFlag(e)) throw e;
+        supportsPurgeFlag = false;
+        console.error('[retention] Interview-purge migration is not available yet; using temporary in-process protection until deploy completes.');
+      }
     },
     async getInterviewByStartRequestKey(startRequestKey) {
       if (!startRequestKey || !supportsStartRequestKey) return null;

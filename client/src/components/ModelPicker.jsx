@@ -17,7 +17,10 @@ function useCatalog(enabled) {
   return { data, loadErr, reload: load };
 }
 
-const activeModel = (data, provider) => modelPrefs.get()[provider] || data?.defaults?.[provider] || '';
+const activeModel = (data, provider) => {
+  const saved = modelPrefs.get()[provider];
+  return data?.catalog?.[provider]?.some((m) => m.id === saved) ? saved : data?.defaults?.[provider] || '';
+};
 
 function optionText(m, provider, active, out) {
   const tags = [];
@@ -117,7 +120,15 @@ function ChangeModelModal({ error, onDone }) {
     if (!model) return;
     setBusy(true);
     setMsg('');
-    const problem = await mount(provider, model);
+    // Provider model lists can briefly contain IDs that are not enabled for a
+    // particular key. Try the selected model first, then the live alternatives
+    // automatically, rather than making the user click through repeated 404s.
+    const candidates = [model, ...list.map((m) => m.id).filter((id) => id !== model && !out.has(`${provider}/${id}`))];
+    let problem = '';
+    for (const candidate of candidates) {
+      problem = await mount(provider, candidate);
+      if (!problem) { setModel(candidate); break; }
+    }
     setBusy(false);
     if (problem) { setMsg(problem); return; }
     onDone(true);
@@ -161,6 +172,11 @@ function ChangeModelModal({ error, onDone }) {
             {configured.length === 0 && (
               <div className="rounded-[6px] border border-red-900/60 bg-red-950/40 p-2.5 text-xs text-red-200">
                 No API key is connected yet. Add a Groq or Gemini key in Settings first.
+              </div>
+            )}
+            {data.modelErrors?.[provider] && (
+              <div className="rounded-[6px] border border-red-900/60 bg-red-950/40 p-2.5 text-xs text-red-200">
+                {data.modelErrors[provider]}
               </div>
             )}
             <Field label={`${PROVIDER_NAME[provider]} model`} hint={list.find((m) => m.id === model)?.note}>

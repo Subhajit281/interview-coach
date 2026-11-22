@@ -1,0 +1,365 @@
+diff --git a/.env.example b/.env.example
+index 5ab0e2d..f7dc5be 100644
+--- a/.env.example
++++ b/.env.example
+@@ -18,9 +18,9 @@ NODE_ENV=development
+ # These choose models when the signed-in user has supplied that provider's key.
+ GROQ_STT_MODEL=whisper-large-v3-turbo
+ STT_LANGUAGE=en
+-GROQ_LLM_MODEL=openai/gpt-oss-120b
+-GROQ_LLM_FALLBACK_MODEL=openai/gpt-oss-20b
+-GEMINI_MODEL=gemini-2.5-flash
++GROQ_LLM_MODEL=openai/gpt-oss-20b
++GROQ_LLM_FALLBACK_MODEL=openai/gpt-oss-120b
++GEMINI_MODEL=gemini-2.5-flash-lite
+ 
+ # Development-only; keep false for deployment.
+ ALLOW_DEVELOPMENT_PROVIDER_KEYS=false
+diff --git a/client/src/components/ModelPicker.jsx b/client/src/components/ModelPicker.jsx
+index 9b7af0d..ed9f9b2 100644
+--- a/client/src/components/ModelPicker.jsx
++++ b/client/src/components/ModelPicker.jsx
+@@ -17,7 +17,10 @@ function useCatalog(enabled) {
+   return { data, loadErr, reload: load };
+ }
+ 
+-const activeModel = (data, provider) => modelPrefs.get()[provider] || data?.defaults?.[provider] || '';
++const activeModel = (data, provider) => {
++  const saved = modelPrefs.get()[provider];
++  return data?.catalog?.[provider]?.some((m) => m.id === saved) ? saved : data?.defaults?.[provider] || '';
++};
+ 
+ function optionText(m, provider, active, out) {
+   const tags = [];
+@@ -117,7 +120,15 @@ function ChangeModelModal({ error, onDone }) {
+     if (!model) return;
+     setBusy(true);
+     setMsg('');
+-    const problem = await mount(provider, model);
++    // Provider model lists can briefly contain IDs that are not enabled for a
++    // particular key. Try the selected model first, then the live alternatives
++    // automatically, rather than making the user click through repeated 404s.
++    const candidates = [model, ...list.map((m) => m.id).filter((id) => id !== model && !out.has(`${provider}/${id}`))];
++    let problem = '';
++    for (const candidate of candidates) {
++      problem = await mount(provider, candidate);
++      if (!problem) { setModel(candidate); break; }
++    }
+     setBusy(false);
+     if (problem) { setMsg(problem); return; }
+     onDone(true);
+@@ -163,6 +174,11 @@ function ChangeModelModal({ error, onDone }) {
+                 No API key is connected yet. Add a Groq or Gemini key in Settings first.
+               </div>
+             )}
++            {data.modelErrors?.[provider] && (
++              <div className="rounded-[6px] border border-red-900/60 bg-red-950/40 p-2.5 text-xs text-red-200">
++                {data.modelErrors[provider]}
++              </div>
++            )}
+             <Field label={`${PROVIDER_NAME[provider]} model`} hint={list.find((m) => m.id === model)?.note}>
+               <select className={selectCls} value={model} onChange={(e) => { setModel(e.target.value); setMsg(''); }} disabled={busy}>
+                 {list.map((m) => <option key={m.id} value={m.id}>{optionText(m, provider, active, out)}</option>)}
+diff --git a/server/src/config/index.js b/server/src/config/index.js
+index e0543c9..abdc99b 100644
+--- a/server/src/config/index.js
++++ b/server/src/config/index.js
+@@ -4,10 +4,13 @@ const production = env.NODE_ENV === 'production';
+ // normalization server-side so a stale Render environment variable cannot make
+ // every interview fail before the fallback is attempted.
+ const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct']);
+-const configuredGroqModel = env.GROQ_LLM_MODEL || 'openai/gpt-oss-120b';
+-const configuredGroqFallback = env.GROQ_LLM_FALLBACK_MODEL || 'openai/gpt-oss-20b';
+-const groqModel = RETIRED_GROQ_MODELS.has(configuredGroqModel) ? 'openai/gpt-oss-120b' : configuredGroqModel;
+-const groqFallbackModel = RETIRED_GROQ_MODELS.has(configuredGroqFallback) || configuredGroqFallback === groqModel ? 'openai/gpt-oss-20b' : configuredGroqFallback;
++// Start with the lighter models: a voice-interview turn is short and latency
++// matters more than maximum benchmark quality. The UI replaces these defaults
++// with models discovered from the signed-in user's own provider key.
++const configuredGroqModel = env.GROQ_LLM_MODEL || 'openai/gpt-oss-20b';
++const configuredGroqFallback = env.GROQ_LLM_FALLBACK_MODEL || 'openai/gpt-oss-120b';
++const groqModel = RETIRED_GROQ_MODELS.has(configuredGroqModel) ? 'openai/gpt-oss-20b' : configuredGroqModel;
++const groqFallbackModel = RETIRED_GROQ_MODELS.has(configuredGroqFallback) || configuredGroqFallback === groqModel ? 'openai/gpt-oss-120b' : configuredGroqFallback;
+ export const config = {
+   port: Number(env.BACKEND_PORT || env.PORT || 3001),
+   clientOrigin: env.FRONTEND_URL || env.CLIENT_ORIGIN || 'http://localhost:5173',
+@@ -22,6 +25,6 @@ export const config = {
+   allowDevelopmentProviderKeys: !production && env.ALLOW_DEVELOPMENT_PROVIDER_KEYS === 'true',
+   dbPath: env.DB_PATH || './data/coach.db',
+   groq: { apiKey: env.GROQ_API_KEY || '', sttModel: env.GROQ_STT_MODEL || 'whisper-large-v3-turbo', sttLanguage: env.STT_LANGUAGE || 'en', llmModel: groqModel, llmFallbackModel: groqFallbackModel },
+-  gemini: { apiKey: env.GEMINI_API_KEY || '', model: env.GEMINI_MODEL || 'gemini-2.5-flash' },
++  gemini: { apiKey: env.GEMINI_API_KEY || '', model: env.GEMINI_MODEL || 'gemini-2.5-flash-lite' },
+   sttDailyBudgetSec: Number(env.STT_DAILY_BUDGET_SEC || 28800),
+ };
+diff --git a/server/src/data/models.js b/server/src/data/models.js
+index d38a501..983cd7d 100644
+--- a/server/src/data/models.js
++++ b/server/src/data/models.js
+@@ -1,6 +1,6 @@
+-// Free-tier chat models that suit the interview simulation (JSON replies, low latency, solid reasoning).
+-// Edit this list to add or retire models. Users can only pick from here, so a typo can never reach a provider.
+-// Free-tier limits change often: trust each provider's console for exact numbers.
++// Fallbacks used only when a provider's live model API cannot be queried (for
++// example the local, unauthenticated development mode). Signed-in users receive
++// a per-key list from the provider instead of this static catalogue.
+ export const MODEL_CATALOG = {
+   groq: [
+     { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Best all-round quality on Groq' },
+@@ -20,34 +20,58 @@ const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-in
+ const fail = (message, code, extra = {}) => Object.assign(new Error(message), { status: 400, code, publicMessage: message, ...extra });
+ 
+ /** Catalog for the UI. The server default is always included so the dropdown can show what is active. */
+-export function catalogFor(config) {
+-  const defaults = { groq: config.groq.llmModel, gemini: config.gemini.model };
++const lightest = {
++  groq: ['openai/gpt-oss-20b', 'llama-3.1-8b-instant'],
++  gemini: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash'],
++};
++
++const rank = (provider, model) => {
++  const id = model.id.toLowerCase();
++  const known = lightest[provider].indexOf(id);
++  if (known !== -1) return known;
++  if (/flash-lite|\bmini\b|\bsmall\b|\b8b\b/.test(id)) return 10;
++  if (/\bflash\b|\b20b\b/.test(id)) return 20;
++  return 100;
++};
++
++const defaultFor = (provider, list, verified, fallback) => {
++  if (verified?.[provider] && list.some((m) => m.id === verified[provider])) return verified[provider];
++  // A live list without a verified model must not silently send an interview to
++  // an ID that only appears in ListModels but cannot generate for this key.
++  if (verified) return '';
++  // Prefer a light, low-latency model even if an older environment variable
++  // named a heavier one. This app makes many short conversational calls.
++  return [...list].sort((a, b) => rank(provider, a) - rank(provider, b))[0]?.id || list.find((m) => m.id === fallback)?.id || '';
++};
++
++/** Builds UI/API model data. `available` is the current key's provider list. */
++export function catalogFor(config, available = null, verified = null) {
++  const fallback = { groq: config.groq.llmModel, gemini: config.gemini.model };
+   const out = {};
+   for (const p of Object.keys(MODEL_CATALOG)) {
+-    const list = MODEL_CATALOG[p].map((m) => ({ ...m, isDefault: m.id === defaults[p] }));
+-    if (defaults[p] && !list.some((m) => m.id === defaults[p])) {
+-      list.unshift({ id: defaults[p], label: defaults[p], note: 'Server default', isDefault: true });
+-    }
++    const source = available ? (Array.isArray(available[p]) ? available[p] : []) : MODEL_CATALOG[p];
++    const selected = defaultFor(p, source, verified, fallback[p]);
++    const list = [...source].sort((a, b) => rank(p, a) - rank(p, b) || a.label.localeCompare(b.label)).map((m) => ({ ...m, isDefault: m.id === selected }));
+     out[p] = list;
+   }
+-  return { catalog: out, defaults };
++  return { catalog: out, defaults: Object.fromEntries(Object.keys(MODEL_CATALOG).map((p) => [p, defaultFor(p, out[p], verified, fallback[p])])) };
+ }
+ 
+-export function isAllowedModel(config, provider, model) {
+-  const { catalog } = catalogFor(config);
++export function isAllowedModel(catalogData, provider, model) {
++  const { catalog } = catalogData?.catalog ? catalogData : catalogFor(catalogData);
+   return Boolean(catalog[provider]?.some((m) => m.id === model));
+ }
+ 
+-export function assertAllowedModel(config, provider, model) {
++export function assertAllowedModel(catalogData, provider, model) {
+   if (!catalog_has(provider)) throw fail('Unknown AI provider.', 'MODEL_INVALID');
+-  if (!isAllowedModel(config, provider, model)) {
++  if (!isAllowedModel(catalogData, provider, model)) {
+     throw fail('That model is not available in the list. Please choose one from the dropdown.', 'MODEL_INVALID', { provider, model });
+   }
+ }
+ const catalog_has = (p) => Object.prototype.hasOwnProperty.call(MODEL_CATALOG, p);
+ 
+ /** Reads the X-Model-Prefs header ({"groq": "...", "gemini": "..."}). Unknown ids are rejected with a readable error. */
+-export function parseModelPrefs(config, headerValue) {
++export function parseModelPrefs(catalogData, headerValue, { ignoreUnknown = false } = {}) {
+   if (!headerValue) return {};
+   let raw;
+   try { raw = JSON.parse(String(headerValue)); } catch { return {}; }
+@@ -59,7 +83,8 @@ export function parseModelPrefs(config, headerValue) {
+     // Browser preferences survive deployments. Silently fall back to the new
+     // server default when that stored Groq model was retired.
+     if (p === 'groq' && RETIRED_GROQ_MODELS.has(m)) continue;
+-    assertAllowedModel(config, p, m);
++    if (ignoreUnknown && !isAllowedModel(catalogData, p, m)) continue;
++    assertAllowedModel(catalogData, p, m);
+     out[p] = m;
+   }
+   return out;
+diff --git a/server/src/routes/secureApi.js b/server/src/routes/secureApi.js
+index 0831bf0..d7551ad 100644
+--- a/server/src/routes/secureApi.js
++++ b/server/src/routes/secureApi.js
+@@ -23,15 +23,20 @@ async function configFor(body, repo) {
+ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
+   const r = Router(), busy = new Set(), starts = createStartGuard();
+   const repo = (req) => repoForUser(req.userId);
+-  const services = async (req) => { const keys = { ...(await credentials.resolve(req.userId)), models: parseModelPrefs(config, req.get('x-model-prefs')) }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
++  const modelsFor = async (userId, keys = null) => catalogFor(config, await credentials.modelCatalog(userId, keys));
++  const services = async (req) => { const rawKeys = await credentials.resolve(req.userId); const modelData = await modelsFor(req.userId, rawKeys); const keys = { ...rawKeys, models: { ...modelData.defaults, ...parseModelPrefs(modelData, req.get('x-model-prefs'), { ignoreUnknown: true }) } }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
+   r.get('/health', (_q, res) => res.json({ ok: true, authRequired: true }));
+   r.get('/meta', wrap(async (req, res) => res.json({ modes: Object.entries(MODES).map(([id, m]) => ({ id, label: m.label, topics: m.topics })), companies: Object.entries(COMPANIES).map(([id, c]) => ({ id, name: c.name, style: c.style, rounds: c.rounds, defaultDurationMin: c.defaultDurationMin })), personalities: Object.entries(PERSONALITIES).map(([id, p]) => ({ id, label: p.label })), styles: Object.entries(STYLES).map(([id, d]) => ({ id, label: d.split(':')[0] })), positions: POSITIONS, difficulties: DIFFICULTIES, durations: DURATIONS, providers: await credentials.status(req.userId) })));
+-  r.get('/models', wrap(async (req, res) => res.json({ ...catalogFor(config), providers: await credentials.status(req.userId) })));
++  r.get('/models', wrap(async (req, res) => {
++    const rawKeys = await credentials.resolve(req.userId);
++    const available = await credentials.modelCatalog(req.userId, rawKeys);
++    res.json({ ...catalogFor(config, available), providers: await credentials.status(req.userId), modelErrors: Object.fromEntries(Object.entries(available).filter(([, value]) => value?.error).map(([provider, value]) => [provider, value.error])) });
++  }));
+   // Confirms a chosen model really works for this user's key (not just that its name is valid) before the UI mounts it.
+   r.post('/models/check', wrap(async (req, res) => {
+     const provider = String(req.body?.provider || ''), model = String(req.body?.model || '').trim();
+-    assertAllowedModel(config, provider, model);
+     const keys = await credentials.resolve(req.userId), apiKey = provider === 'groq' ? keys.groqKey : keys.geminiKey;
++    assertAllowedModel(await modelsFor(req.userId, keys), provider, model);
+     if (!apiKey) throw Object.assign(new Error(`Add your ${PROVIDER_LABEL[provider]} API key in Settings to use ${PROVIDER_LABEL[provider]} models.`), { status: 428 });
+     try { await llm.probe({ provider, model, apiKey }); } catch (e) { throw friendly(e, provider, model); }
+     res.json({ ok: true, provider, model });
+diff --git a/server/src/services/credentialService.js b/server/src/services/credentialService.js
+index b650b66..2b93381 100644
+--- a/server/src/services/credentialService.js
++++ b/server/src/services/credentialService.js
+@@ -1,6 +1,27 @@
+ import { decryptSecret, encryptSecret } from '../utils/encryption.js';
+ const fail = (message, status = 400) => Object.assign(new Error(message), { status });
+ const clean = (value) => String(value || '').trim();
++const modelCache = new Map();
++const CACHE_MS = 5 * 60 * 1000;
++const label = (id) => id.replace(/^models\//, '').split(/[-/]/).map((x) => x ? x[0].toUpperCase() + x.slice(1) : '').join(' ');
++const geminiChatModel = (model) => model.name?.startsWith('models/gemini-')
++  && Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent')
++  && !/(image|tts|audio|embedding|live|robotics)/i.test(model.name);
++const groqChatModel = (model) => typeof model.id === 'string'
++  && !/(whisper|speech|tts|audio|guard|embedding|compound)/i.test(model.id);
++
++async function providerModels(fetchImpl, provider, apiKey) {
++  const request = provider === 'groq'
++    ? ['https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${apiKey}` } }]
++    : [`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`, {}];
++  const response = await fetchImpl(...request);
++  if (!response.ok) throw fail(`Could not load your ${provider === 'groq' ? 'Groq' : 'Gemini'} model list.`, response.status === 401 || response.status === 403 ? 401 : 502);
++  const data = await response.json();
++  const rows = provider === 'groq' ? (data.data || []).filter(groqChatModel).map((m) => ({ id: m.id, label: label(m.id), note: 'Available with your Groq key' }))
++    : (data.models || []).filter(geminiChatModel).map((m) => ({ id: m.name.slice('models/'.length), label: m.displayName || label(m.name), note: 'Available with your Gemini key' }));
++  return rows;
++}
++
+ export function createCredentialService({ prisma, config, fetchImpl = fetch }) {
+   // A bad AES-GCM tag means the Render encryption secret changed after these
+   // keys were saved. It is not recoverable, so surface a reset state rather
+@@ -29,6 +50,7 @@ export function createCredentialService({ prisma, config, fetchImpl = fetch }) {
+       const data = {};
+       if (geminiKey !== undefined) Object.assign(data, { encryptedGeminiKey: geminiKey ? encryptSecret(geminiKey, config.encryptionSecret) : null, geminiConfigured: Boolean(geminiKey) });
+       if (groqKey !== undefined) Object.assign(data, { encryptedGroqKey: groqKey ? encryptSecret(groqKey, config.encryptionSecret) : null, groqConfigured: Boolean(groqKey) });
++      modelCache.delete(userId);
+       return state(await prisma.userApiCredential.upsert({ where: { userId }, create: { userId, ...data }, update: data }));
+     },
+     async remove(userId, provider) { return this.update(userId, provider === 'gemini' ? { geminiKey: '' } : provider === 'groq' ? { groqKey: '' } : (() => { throw fail('Unknown provider.'); })()); },
+@@ -41,5 +63,19 @@ export function createCredentialService({ prisma, config, fetchImpl = fetch }) {
+       if (!row || (!current.geminiConfigured && !current.groqConfigured)) throw Object.assign(fail('Configure an AI provider key before starting an interview.', 428), { code: 'PROVIDER_NOT_CONFIGURED' });
+       return { geminiKey: current.geminiConfigured ? decryptSecret(row.encryptedGeminiKey, config.encryptionSecret) : '', groqKey: current.groqConfigured ? decryptSecret(row.encryptedGroqKey, config.encryptionSecret) : '' };
+     },
++    async modelCatalog(userId, suppliedKeys = null) {
++      const cached = modelCache.get(userId);
++      if (cached && cached.expiresAt > Date.now()) return cached.value;
++      const keys = suppliedKeys || await this.resolve(userId);
++      const entries = await Promise.all(['groq', 'gemini'].map(async (provider) => {
++        const apiKey = provider === 'groq' ? keys.groqKey : keys.geminiKey;
++        if (!apiKey) return [provider, []];
++        try { return [provider, await providerModels(fetchImpl, provider, apiKey)]; }
++        catch (error) { return [provider, { error: error.message }]; }
++      }));
++      const value = Object.fromEntries(entries);
++      modelCache.set(userId, { value, expiresAt: Date.now() + CACHE_MS });
++      return value;
++    },
+   };
+ }
+diff --git a/server/src/services/prismaRepo.js b/server/src/services/prismaRepo.js
+index 7f517e7..ab1ecba 100644
+--- a/server/src/services/prismaRepo.js
++++ b/server/src/services/prismaRepo.js
+@@ -1,3 +1,5 @@
++import { Prisma } from '@prisma/client';
++
+ const session = (x) => x && ({ ...x, duration_min: Math.round((x.durationSec || 0) / 60), elapsed_sec: x.durationSec || 0, started_at: x.startTime, ended_at: x.endTime, mode: x.type, project_id: x.projectId });
+ const message = (x) => ({ ...x, interview_id: x.sessionId, meta: x.meta ? JSON.stringify(x.meta) : null, created_at: x.createdAt });
+ const question = (x) => ({ ...x, interview_id: x.sessionId, title: x.question, mode: x.questionType, hints_used: x.hintsUsed, asked_at: x.createdAt });
+@@ -8,7 +10,13 @@ export function createPrismaRepo(prisma, userId) {
+   // in-memory fallback avoids taking the whole interview flow down if a host
+   // briefly runs code newer than its generated Prisma client.
+   let supportsStartRequestKey = true;
++  // Do not use a generated-client field for this switch. Render can briefly
++  // start new application code with an older generated Prisma client; raw SQL
++  // still works against an already-migrated database and avoids an outage.
++  let supportsPurgeFlag = true;
++  let processPurgeRequired = false;
+   const staleClientError = (e) => e?.name === 'PrismaClientValidationError' && /Unknown argument [`']?startRequestKey/i.test(e.message || '');
++  const missingPurgeFlag = (e) => /interviewPurgeRequired|column .*does not exist/i.test(e?.message || '');
+   const createSession = async (c, withStartKey) => prisma.interviewSession.create({ data: {
+     userId, projectId: c.projectId || null, ...(withStartKey ? { startRequestKey: c.startRequestKey } : {}),
+     title: `${c.position} ${c.mode} interview`, type: c.mode, company: c.company, position: c.position,
+@@ -17,14 +25,28 @@ export function createPrismaRepo(prisma, userId) {
+   } });
+   return {
+     async interviewRetention() {
+-      const [total, user] = await Promise.all([
+-        prisma.interviewSession.count({ where: { userId } }),
+-        prisma.user.findUnique({ where: { id: userId }, select: { interviewPurgeRequired: true } }),
+-      ]);
+-      return { total, purgeRequired: Boolean(user?.interviewPurgeRequired) };
++      const total = await prisma.interviewSession.count({ where: { userId } });
++      if (!supportsPurgeFlag) return { total, purgeRequired: processPurgeRequired };
++      try {
++        const rows = await prisma.$queryRaw(Prisma.sql`SELECT "interviewPurgeRequired" FROM "User" WHERE "id" = ${userId}`);
++        processPurgeRequired = Boolean(rows[0]?.interviewPurgeRequired);
++      } catch (e) {
++        if (!missingPurgeFlag(e)) throw e;
++        supportsPurgeFlag = false;
++        console.error('[retention] Interview-purge migration is not available yet; using temporary in-process protection until deploy completes.');
++      }
++      return { total, purgeRequired: processPurgeRequired };
+     },
+     async setInterviewPurgeRequired(purgeRequired) {
+-      await prisma.user.update({ where: { id: userId }, data: { interviewPurgeRequired: Boolean(purgeRequired) } });
++      processPurgeRequired = Boolean(purgeRequired);
++      if (!supportsPurgeFlag) return;
++      try {
++        await prisma.$executeRaw(Prisma.sql`UPDATE "User" SET "interviewPurgeRequired" = ${processPurgeRequired} WHERE "id" = ${userId}`);
++      } catch (e) {
++        if (!missingPurgeFlag(e)) throw e;
++        supportsPurgeFlag = false;
++        console.error('[retention] Interview-purge migration is not available yet; using temporary in-process protection until deploy completes.');
++      }
+     },
+     async getInterviewByStartRequestKey(startRequestKey) {
+       if (!startRequestKey || !supportsStartRequestKey) return null;
+diff --git a/server/test/credentialService.test.js b/server/test/credentialService.test.js
+index 79242de..bb5375d 100644
+--- a/server/test/credentialService.test.js
++++ b/server/test/credentialService.test.js
+@@ -19,3 +19,26 @@ test('readable saved provider keys remain configured', async () => {
+   assert.deepEqual(await service.status('user'), { geminiConfigured: false, groqConfigured: true, credentialResetRequired: false });
+   assert.equal((await service.resolve('user')).groqKey, 'gsk_key');
+ });
++
++test('model catalog is built from models available to the saved provider keys', async () => {
++  const prisma = { userApiCredential: { findUnique: async () => ({
++    geminiConfigured: true, groqConfigured: true,
++    encryptedGeminiKey: encryptSecret('gem_key', config.encryptionSecret),
++    encryptedGroqKey: encryptSecret('gsk_key', config.encryptionSecret),
++  }) } };
++  const fetchImpl = async (url) => {
++    const body = url.includes('api.groq.com')
++      ? { data: [{ id: 'openai/gpt-oss-20b' }, { id: 'whisper-large-v3' }] }
++      : { models: [
++      { name: 'models/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite', supportedGenerationMethods: ['generateContent'] },
++      { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] },
++      ] };
++    return new Response(JSON.stringify(body), { status: 200 });
++  };
++  const service = createCredentialService({ prisma, config, fetchImpl });
++
++  assert.deepEqual(await service.modelCatalog('catalog-user'), {
++    groq: [{ id: 'openai/gpt-oss-20b', label: 'Openai Gpt Oss 20b', note: 'Available with your Groq key' }],
++    gemini: [{ id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', note: 'Available with your Gemini key' }],
++  });
++});

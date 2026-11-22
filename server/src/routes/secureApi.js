@@ -23,15 +23,20 @@ async function configFor(body, repo) {
 export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
   const r = Router(), busy = new Set(), starts = createStartGuard();
   const repo = (req) => repoForUser(req.userId);
-  const services = async (req) => { const keys = { ...(await credentials.resolve(req.userId)), models: parseModelPrefs(config, req.get('x-model-prefs')) }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
+  const modelsFor = async (userId, keys = null) => catalogFor(config, await credentials.modelCatalog(userId, keys));
+  const services = async (req) => { const rawKeys = await credentials.resolve(req.userId); const modelData = await modelsFor(req.userId, rawKeys); const keys = { ...rawKeys, models: { ...modelData.defaults, ...parseModelPrefs(modelData, req.get('x-model-prefs'), { ignoreUnknown: true }) } }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
   r.get('/health', (_q, res) => res.json({ ok: true, authRequired: true }));
   r.get('/meta', wrap(async (req, res) => res.json({ modes: Object.entries(MODES).map(([id, m]) => ({ id, label: m.label, topics: m.topics })), companies: Object.entries(COMPANIES).map(([id, c]) => ({ id, name: c.name, style: c.style, rounds: c.rounds, defaultDurationMin: c.defaultDurationMin })), personalities: Object.entries(PERSONALITIES).map(([id, p]) => ({ id, label: p.label })), styles: Object.entries(STYLES).map(([id, d]) => ({ id, label: d.split(':')[0] })), positions: POSITIONS, difficulties: DIFFICULTIES, durations: DURATIONS, providers: await credentials.status(req.userId) })));
-  r.get('/models', wrap(async (req, res) => res.json({ ...catalogFor(config), providers: await credentials.status(req.userId) })));
+  r.get('/models', wrap(async (req, res) => {
+    const rawKeys = await credentials.resolve(req.userId);
+    const available = await credentials.modelCatalog(req.userId, rawKeys);
+    res.json({ ...catalogFor(config, available), providers: await credentials.status(req.userId), modelErrors: Object.fromEntries(Object.entries(available).filter(([, value]) => value?.error).map(([provider, value]) => [provider, value.error])) });
+  }));
   // Confirms a chosen model really works for this user's key (not just that its name is valid) before the UI mounts it.
   r.post('/models/check', wrap(async (req, res) => {
     const provider = String(req.body?.provider || ''), model = String(req.body?.model || '').trim();
-    assertAllowedModel(config, provider, model);
     const keys = await credentials.resolve(req.userId), apiKey = provider === 'groq' ? keys.groqKey : keys.geminiKey;
+    assertAllowedModel(await modelsFor(req.userId, keys), provider, model);
     if (!apiKey) throw Object.assign(new Error(`Add your ${PROVIDER_LABEL[provider]} API key in Settings to use ${PROVIDER_LABEL[provider]} models.`), { status: 428 });
     try { await llm.probe({ provider, model, apiKey }); } catch (e) { throw friendly(e, provider, model); }
     res.json({ ok: true, provider, model });
