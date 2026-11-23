@@ -275,19 +275,16 @@ test('model verdict "stray" removes the message and keeps the thread intact', as
   } finally { close(); }
 });
 
-test('a premature topic switch triggers one corrective retry for a counter-question', async () => {
+test('a topic switch after one answer costs no extra LLM call (latency over forced probing)', async () => {
   const { call, llm, close } = await boot([
     reply({ say: 'Explain deadlock.', new_question: true, question_title: 'Deadlock', topic: 'Graphs' }),
     reply({ analysis: 'Defined it correctly.', verdict: 'correct', say: 'Now tell me about TCP.', new_question: true, question_title: 'TCP' }),
-    reply({ analysis: 'Defined it but gave no example.', verdict: 'partial', say: 'You mentioned circular wait. How would you break it?' }),
   ]);
   try {
     const id = (await call('/interviews', 'POST', CFG)).data.interview.id;
     const r = await call(`/interviews/${id}/turn`, 'POST', { text: 'Processes wait on each other forever, circular wait.', elapsedSec: 60 });
-    assert.equal(r.data.say, 'You mentioned circular wait. How would you break it?');
-    assert.equal(r.data.newQuestion, false);
-    assert.equal(llm.calls.length, 3);
-    assert.ok(llm.calls[2].system.includes('CORRECTION'));
+    assert.equal(r.data.say, 'Now tell me about TCP.');
+    assert.equal(llm.calls.length, 2); // one call for the opening, one for this turn: no corrective retry
     assert.ok(!('analysis' in r.data));
   } finally { close(); }
 });
@@ -303,7 +300,7 @@ test('a request to explain the question stays on the same thread and receives ex
     assert.equal(r.status, 200);
     assert.equal(r.data.newQuestion, false);
     assert.match(llm.calls[1].system, /CLARIFICATION REQUEST/);
-    assert.equal(llm.calls[1].maxTokens, 480);
+    assert.equal(llm.calls[1].maxTokens, 900);
     assert.equal(llm.calls[1].json, false);
   } finally { close(); }
 });

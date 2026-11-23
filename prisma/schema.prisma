@@ -163,3 +163,21 @@ model TopicStat {
   @@unique([userId, topic])
   @@index([userId, topic])
 }
+
+// Shared, company-wise cache of interview questions (generic problem statements only; no candidate data).
+model CachedQuestion {
+  id String @id @default(uuid())
+  company String
+  mode String
+  difficulty String
+  topic String?
+  title String
+  titleKey String
+  spoken String @default("")
+  board String @default("")
+  source String @default("live")
+  uses Int @default(0)
+  createdAt DateTime @default(now())
+  @@unique([company, mode, titleKey])
+  @@index([company, mode, difficulty])
+}

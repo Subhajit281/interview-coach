@@ -20,6 +20,7 @@ import { createAuthMiddleware } from './middleware/authMiddleware.js';
 import { createAuthRouter } from './routes/auth.js';
 import { secureApiRouter } from './routes/secureApi.js';
 import { createPrismaRepo } from './services/prismaRepo.js';
+import { createQuestionBank, createMemoryBank, createPrismaBank } from './services/questionBank.js';
 import { redactSecrets } from './utils/redact.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,8 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
   const groq = createGroq({ config, fetchImpl, sleep, tracker });
   const gemini = createGemini({ config, fetchImpl, sleep });
   const theLlm = llm ?? createLlm({ config, groq, gemini });
+  // Company-wise question cache: persistent in production, in memory for the SQLite dev server and tests.
+  const bank = createQuestionBank({ store: prisma ? createPrismaBank(prisma) : createMemoryBank(), llm: theLlm, prefill: Boolean(prisma) });
   const theStt = stt ?? createStt({ config, groq, tracker });
 
   const app = express();
@@ -49,9 +52,9 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
     const credentials = createCredentialService({ prisma, config, fetchImpl });
     const requireAuth = createAuthMiddleware({ prisma, config });
     app.use('/api/auth', createAuthRouter({ auth, credentials, config, requireAuth }));
-    app.use('/api', requireAuth, secureApiRouter({ repoForUser: (userId) => createPrismaRepo(prisma, userId), llm: theLlm, stt: theStt, credentials, tracker }));
+    app.use('/api', requireAuth, secureApiRouter({ repoForUser: (userId) => createPrismaRepo(prisma, userId), llm: theLlm, stt: theStt, credentials, tracker, bank }));
   } else {
-    app.use('/api', apiRouter({ repo, tracker, stt: theStt, interviewer: createInterviewer({ repo, llm: theLlm }), evaluator: createEvaluator({ repo, llm: theLlm }) }));
+    app.use('/api', apiRouter({ repo, tracker, stt: theStt, interviewer: createInterviewer({ repo, llm: theLlm, bank }), evaluator: createEvaluator({ repo, llm: theLlm }) }));
   }
 
   const dist = resolve(here, '../../client/dist');

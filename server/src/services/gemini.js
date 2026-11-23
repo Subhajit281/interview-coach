@@ -42,7 +42,7 @@ export function createGemini({ config, fetchImpl = fetch, sleep }) {
       const why = data.promptFeedback?.blockReason || data.candidates?.[0]?.finishReason || 'empty response';
       throw new ProviderError(`Gemini ${model}: no text (${why})`, 502);
     }
-    return { text, provider: 'gemini', model };
+    return { text, provider: 'gemini', model, truncated: data.candidates?.[0]?.finishReason === 'MAX_TOKENS' };
   }
   return { chat };
 }

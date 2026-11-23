@@ -1,4 +1,4 @@
-import { fetchWithRetry } from './http.js';
+import { fetchWithRetry, ProviderError } from './http.js';
 
 const BASE = 'https://api.groq.com/openai/v1';
 
@@ -21,14 +21,28 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
     if (json) body.response_format = { type: 'json_object' };
     if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
 
-    const res = await fetchWithRetry(
-      `${BASE}/chat/completions`,
-      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
-      opts(`Groq ${model}`, { timeoutMs, retries }),
-    );
-    tracker?.record('groq', model, res.headers);
-    const data = await res.json();
-    return { text: data.choices?.[0]?.message?.content ?? '', provider: 'groq', model };
+    const once = async () => {
+      const res = await fetchWithRetry(
+        `${BASE}/chat/completions`,
+        { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
+        opts(`Groq ${model}`, { timeoutMs, retries }),
+      );
+      tracker?.record('groq', model, res.headers);
+      const data = await res.json();
+      const choice = data.choices?.[0];
+      const text = choice?.message?.content ?? '';
+      // Reasoning models spend max_tokens on hidden thinking. An empty reply must fail over to the next model
+      // instead of reaching the interviewer as "no answer" (this was the silent failure).
+      if (!text.trim()) throw new ProviderError(`Groq ${model}: empty reply (${choice?.finish_reason || 'no content'}); its token budget was probably used up by reasoning`, 502);
+      return { text, provider: 'groq', model, truncated: choice?.finish_reason === 'length' };
+    };
+    // gpt-oss on Groq sometimes returns nothing parseable (HTTP 400 output_parse_failed, or an empty reply).
+    // These are transient: retry the same model once, quickly, before the router escalates to a bigger model.
+    try { return await once(); }
+    catch (e) {
+      if (signal?.aborted || !(e instanceof ProviderError) || !/output_parse_failed|Parsing failed|empty reply/.test(e.message)) throw e;
+      return once();
+    }
   }
 
   async function transcribe({ buffer, mime = 'audio/webm', filename = 'audio.webm', apiKey }) {

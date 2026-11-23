@@ -24,7 +24,7 @@ export function createLlm({ config, groq, gemini, log = console }) {
     return prefer === 'gemini' ? [...m, ...g] : [...g, ...m];
   }
 
-  async function run({ prefer = 'groq', ...req }) {
+  async function run({ prefer = 'groq', hedgeMs = 0, ...req }) {
     const chain = chainFor(prefer, req.credentials);
     if (!chain.length) {
       throw new ProviderError('No LLM provider configured. Set GROQ_API_KEY and/or GEMINI_API_KEY in .env.', 503);
@@ -32,11 +32,61 @@ export function createLlm({ config, groq, gemini, log = console }) {
     const errors = [];
     const failures = [];
     const limited = new Set();
+    const primaryModel = chain[0].model;
+    const record = (step, e) => {
+      const c = classify(e);
+      if (c.kind === 'limit') limited.add(step.provider);
+      failures.push({ provider: step.provider, model: step.model, ...c });
+      errors.push(`${step.provider}/${step.model}: ${e.message}`);
+      log.warn?.(`[llm] ${step.provider}/${step.model} failed, trying next: ${e.message}`);
+    };
+    const finalError = () => summarize(failures) || new ProviderError(`All LLM providers failed.\n${errors.join('\n')}`, 502);
+
+    // Hedged mode (live voice turns): if the current model has not answered after hedgeMs, ask the next model
+    // in parallel and use whichever replies first. A slow model no longer costs 20-30 s of dead air.
+    if (hedgeMs > 0 && chain.length > 1) {
+      return new Promise((resolve, reject) => {
+        let next = 0, pending = 0, settled = false, timer = null;
+        const controllers = new Set();
+        const finish = (fn, v) => {
+          if (settled) return;
+          settled = true; clearTimeout(timer);
+          controllers.forEach((c) => c.abort(new DOMException('Superseded', 'AbortError')));
+          fn(v);
+        };
+        const armHedge = () => { clearTimeout(timer); if (next < chain.length) timer = setTimeout(() => { if (!settled) launch(); }, hedgeMs); };
+        const launch = () => {
+          while (next < chain.length) {
+            const step = chain[next++];
+            if (step.secondary && limited.has(step.provider)) continue;
+            const ctrl = new AbortController();
+            controllers.add(ctrl);
+            if (req.signal) { if (req.signal.aborted) ctrl.abort(req.signal.reason); else req.signal.addEventListener('abort', () => ctrl.abort(req.signal.reason), { once: true }); }
+            pending++;
+            (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model, apiKey: step.apiKey, signal: ctrl.signal }).then(
+              (r) => finish(resolve, { ...r, primaryModel }),
+              (e) => {
+                pending--;
+                if (settled) return;
+                if (req.signal?.aborted) { finish(reject, e); return; }
+                record(step, e);
+                if (!launch() && pending === 0) finish(reject, finalError());
+              },
+            );
+            armHedge();
+            return true;
+          }
+          return false;
+        };
+        if (!launch()) reject(finalError());
+      });
+    }
+
     for (const step of chain) {
       // When a provider's daily quota is gone, its backup model is skipped so the user gets to choose instead.
       if (step.secondary && limited.has(step.provider)) continue;
       try {
-        return await (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model, apiKey: step.apiKey });
+        return { ...(await (step.provider === 'groq' ? groq : gemini).chat({ ...req, model: step.model, apiKey: step.apiKey })), primaryModel };
       } catch (e) {
         // An interview-start deadline or a disconnected browser must stop the
         // whole provider chain; falling through would keep a dead request alive.

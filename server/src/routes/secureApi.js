@@ -20,7 +20,7 @@ async function configFor(body, repo) {
   if (mode === 'project' && !projectId) throw err(400, 'Project Discussion needs one of your saved projects.');
   return { mode, company, position, difficulty: b.difficulty, personality: b.personality, durationMin, style: STYLES[b.style] ? b.style : 'standard', round: COMPANIES[company].rounds.includes(b.round) ? b.round : COMPANIES[company].rounds[0], projectId };
 }
-export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
+export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker, bank = null }) {
   const r = Router(), busy = new Set(), starts = createStartGuard(), interviewers = new Map();
   const repo = (req) => repoForUser(req.userId);
   const modelsFor = async (userId, keys = null) => catalogFor(config, await credentials.modelCatalog(userId, keys));
@@ -33,7 +33,7 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
     // unanswered-answer strikes were erased before every voice turn.
     let interviewer = interviewers.get(req.userId);
     if (!interviewer) {
-      interviewer = createInterviewer({ repo: current, llm });
+      interviewer = createInterviewer({ repo: current, llm, bank });
       interviewers.set(req.userId, interviewer);
     }
     return { repo: current, interviewer, evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys };

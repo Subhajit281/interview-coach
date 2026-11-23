@@ -25,7 +25,7 @@ export function getInterviewerPersona(interviewId = 0) {
 
 export function buildSystemPrompt({
   interview, focusTopics = [], askedTitles = [], weaknesses = [], project = null, elapsedSec = 0, strikes = 0, maxStrikes = 5,
-  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null, clarification = false,
+  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null, clarification = false, bankQuestion = null,
 }) {
   const mode = MODES[interview.mode];
   const company = COMPANIES[interview.company] || COMPANIES.generic;
@@ -74,7 +74,7 @@ export function buildSystemPrompt({
     '',
     `MODE GUIDANCE: ${mode.guidance}`,
     '',
-    'ANSWER ANALYSIS (mandatory before every reply, recorded in "analysis"): (a) restate in a few words what the candidate actually claimed; (b) list what is correct; (c) list what is missing, imprecise or wrong, naming the exact statement or step; (d) choose the verdict. ' +
+    'ANSWER ANALYSIS (mandatory before every reply, recorded in "analysis" in ONE short sentence because this is a live voice call and every extra word delays your reply): (a) restate in a few words what the candidate actually claimed; (b) list what is correct; (c) list what is missing, imprecise or wrong, naming the exact statement or step; (d) choose the verdict. ' +
       'Never call an answer vague, incorrect or wrong unless "analysis" names the specific claim or gap. If you are unsure what they meant, ask a clarifying question that uses their own words instead of judging. ' +
       'An unconventional but valid approach is correct. Incomplete is not incorrect. Check complexity claims and examples by reasoning, not by assumption.',
     `COUNTER-QUESTIONS: Every genuine answer earns at least ${minProbes} counter-question(s) on the SAME question before you move to a new one. Build each counter-question from the candidate's own answer: a claim to justify ("You said X; why not Y?"), ` +
@@ -113,6 +113,16 @@ export function buildSystemPrompt({
       `Shape the question for ${company.name} and the ${interview.position} level, and adapt the wording freely: the theme is a starting point, not a script. If the candidate\'s project or earlier answers make the theme a poor fit, pick a closely related fresh theme, never a classic overused one.`,
     );
   }
+  if (bankQuestion) {
+    lines.push(
+      '',
+      `COMPANY QUESTION BANK (preferred source for your next NEW main question; ${company.name}, ${mode.label}, ${bankQuestion.difficulty}): title "${bankQuestion.title}"${bankQuestion.topic ? `, topic ${bankQuestion.topic}` : ''}. ` +
+        (bankQuestion.spoken ? `Original wording: "${clip(bankQuestion.spoken, 600)}" ` : 'Only the title and topic are known, so phrase the question yourself, stating the real problem aloud. ') +
+        (bankQuestion.board ? `Board text: ${clip(bankQuestion.board, 800)} ` : '') +
+        `When you pose a NEW main question, use this one instead of the blueprint theme: keep its substance, freshen the wording and numbers, and set question_title to exactly "${bankQuestion.title}". ` +
+        'Skip it only if it clearly does not suit the candidate\'s level or earlier answers. Never use it for counter-questions.',
+    );
+  }
   if (askedTitles.length) lines.push(`Questions asked in past ${mode.label} interviews (avoid repeating): ${askedTitles.join('; ')}.`);
   if (weaknesses.length) lines.push(`Recurring weaknesses from past ${mode.label} reports (probe only if they fit the current question naturally): ${weaknesses.join('; ')}.`);
   if (project) lines.push('', `CANDIDATE PROJECT "${project.name}":\n${clip(project.description, 6000)}`);
@@ -121,7 +131,7 @@ export function buildSystemPrompt({
     '',
     'OUTPUT: respond with ONLY a JSON object, no other text. Keep the keys in this exact order so your analysis comes first:',
     '{"analysis": string, "verdict": string, "say": string, "board": string, "topic": string, "new_question": boolean, "question_title": string, "hint_given": boolean, "wrap_up": boolean, "candidate_stuck": boolean, "end_interview": boolean, "satisfaction": number}',
-    '- analysis: 1-3 sentences, private, per ANSWER ANALYSIS. For the opening turn write "Opening."',
+    '- analysis: ONE short sentence (max 25 words), private: what they claimed and the exact gap, if any. For the opening turn write "Opening."',
     '- verdict: one of "correct", "partial", "incorrect", "unclear", "off_topic", "stray", "none" (use "none" for the opening turn and for [NO RESPONSE]).',
     '- board: full problem/schema text when posing a new question, otherwise "".',
     '- topic: one topic from the mode topic list. new_question: true only when you pose a brand new main question; then give a short question_title.',

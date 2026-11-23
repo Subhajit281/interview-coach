@@ -33,6 +33,9 @@ function loadSettings() {
   catch { return { ...DEFAULTS }; }
 }
 const NO_RESPONSE = '[NO RESPONSE]';
+// Short, formal acknowledgements spoken only if the interviewer is slow, so the call never goes silent for long.
+const FILLERS = ['Understood. Give me a moment to consider that.', 'Thank you. Let me think about that for a moment.', 'Understood. One moment.', 'I see. Let me weigh that.'];
+const CODE_FILLERS = ['Thank you. Let me read through your code.', 'Understood. Let me trace through that.'];
 function loadEditorPrefs() {
   try { return { highlightOn: true, lang: 'python', ...JSON.parse(localStorage.getItem('ic.editor') || '{}') }; }
   catch { return { highlightOn: true, lang: 'python' }; }
@@ -121,6 +124,11 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   const activityRef = useRef(0);
   const endAfterSpeech = useRef(false);
   const lastBoardRef = useRef('');
+  const fillerTimer = useRef(null);
+  const pauseRef = useRef(null);
+  const resumeRef = useRef(null);
+  const fillerDone = useRef(Promise.resolve());
+  const lastFiller = useRef(-1);
   const startAbortRef = useRef(null);
   const startInFlightRef = useRef(false);
   const startKeyRef = useRef(createStartKey());
@@ -129,6 +137,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   const clearTimers = () => {
     clearTimeout(readTimer.current); readTimer.current = null;
     clearTimeout(idleTimer.current); idleTimer.current = null;
+    clearTimeout(fillerTimer.current);
   };
 
   const armIdle = (ms) => {
@@ -176,6 +185,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
   };
 
   const applyReply = (r) => {
+    clearTimeout(fillerTimer.current);
     setMessages((m) => [...m, { role: 'interviewer', content: r.say, board: r.board }]);
     if (r.board) {
       setBoard(r.board);
@@ -190,7 +200,12 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
       setInterviewerInfo(r.interviewer);
       interviewerGender.current = r.interviewer.gender;
     }
-    speakReply(r.say, r.interviewer);
+    // If a filler phrase is being spoken, let it finish (max 2.5 s) before the real reply starts.
+    const from = phaseRef.current;
+    Promise.race([fillerDone.current, new Promise((res) => setTimeout(res, 2500))]).then(() => {
+      fillerDone.current = Promise.resolve();
+      if (mountedRef.current && phaseRef.current === from) speakReply(r.say, r.interviewer);
+    });
   };
 
   // The server keeps this key with the session. Retrying after a browser or proxy
@@ -269,12 +284,24 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
     cancelSpeech();
     if (userText) setMessages((m) => [...m, { role: 'candidate', content: userText }]);
     go('ai_thinking');
+    clearTimeout(fillerTimer.current);
+    if (userText && userText !== NO_RESPONSE) {
+      fillerTimer.current = setTimeout(() => {
+        if (phaseRef.current !== 'ai_thinking') return;
+        const pool = userText.startsWith('[CODE]') ? CODE_FILLERS : FILLERS;
+        let i = Math.floor(Math.random() * pool.length);
+        if (pool.length > 1 && i === lastFiller.current) i = (i + 1) % pool.length;
+        lastFiller.current = i;
+        fillerDone.current = new Promise((res) => { speak(pool[i], { ...settingsRef.current, gender: interviewerGender.current }, res); setTimeout(res, 3500); });
+      }, 2200);
+    }
     setError('');
     setCanRetry(false);
     setModelBlocked(false);
     try {
       // If the model's limit is hit, the interview waits here (clock stopped, answer kept) until a new model is mounted.
       // The answer is stored server-side by the first attempt, so retries send no text (nothing is duplicated).
+      await resumeRef.current; // make sure the server has the session active before sending the answer
       let resend = true;
       const r = await guard(
         async () => {
@@ -284,13 +311,17 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
         { onWait: () => { setError(''); go('model_wait'); }, onResume: () => go('ai_thinking') },
       );
       if (r.ignored) {
+        clearTimeout(fillerTimer.current); cancelSpeech();
         if (userText) setMessages((m) => (m.length && m[m.length - 1].role === 'candidate' && m[m.length - 1].content === userText ? m.slice(0, -1) : m));
         flash('Ambient sound detected and ignored. Your time and question are preserved.');
         go('ready');
         return;
       }
+      if (r.notice) flash(r.notice);
       applyReply(r);
     } catch (e) {
+      clearTimeout(fillerTimer.current);
+      cancelSpeech();
       setError(e.message);
       setCanRetry(true);
       setModelBlocked(Boolean(e.modelDeclined));
@@ -377,12 +408,17 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
 
   const pause = async () => {
     clearTimers(); cancelSpeech(); voiceRef.current?.disarm(); go('paused');
-    try { await api.pause(idRef.current); } catch (e) { setError(e.message); }
+    pauseRef.current = api.pause(idRef.current).catch((e) => { setError(e.message); });
+    await pauseRef.current;
   };
-  const resume = async () => {
-    try { await api.resume(idRef.current); } catch (e) { setError(e.message); return; }
+  // Resume is optimistic: the interviewer starts speaking at once and the server is told in the background
+  // (the round trip used to delay everything by a few seconds). A failure puts the session back to paused.
+  const resume = () => {
     setError('');
     speakReply(lastSay.current || 'Let us continue.');
+    resumeRef.current = Promise.resolve(pauseRef.current)
+      .then(() => api.resume(idRef.current))
+      .catch((e) => { cancelSpeech(); clearTimers(); go('paused'); setError(e.message); });
   };
   const repeat = () => { voiceRef.current?.disarm(); speakReply(lastSay.current); };
   const interrupt = () => { cancelSpeech(); beginListening(); };

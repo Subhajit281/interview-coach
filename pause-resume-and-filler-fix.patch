@@ -1,0 +1,51 @@
+diff --git a/client/src/components/Interview.jsx b/client/src/components/Interview.jsx
+index 10a74c0..ade9d84 100644
+--- a/client/src/components/Interview.jsx
++++ b/client/src/components/Interview.jsx
+@@ -34,7 +34,7 @@ function loadSettings() {
+ }
+ const NO_RESPONSE = '[NO RESPONSE]';
+ // Short, formal acknowledgements spoken only if the interviewer is slow, so the call never goes silent for long.
+-const FILLERS = ['Understood. Give me a moment to consider that.', 'Thank you. Let me think about that for a moment.', 'Mm-hmm. One moment.', 'I see. Let me weigh that.'];
++const FILLERS = ['Understood. Give me a moment to consider that.', 'Thank you. Let me think about that for a moment.', 'Understood. One moment.', 'I see. Let me weigh that.'];
+ const CODE_FILLERS = ['Thank you. Let me read through your code.', 'Understood. Let me trace through that.'];
+ function loadEditorPrefs() {
+   try { return { highlightOn: true, lang: 'python', ...JSON.parse(localStorage.getItem('ic.editor') || '{}') }; }
+@@ -125,6 +125,8 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+   const endAfterSpeech = useRef(false);
+   const lastBoardRef = useRef('');
+   const fillerTimer = useRef(null);
++  const pauseRef = useRef(null);
++  const resumeRef = useRef(null);
+   const fillerDone = useRef(Promise.resolve());
+   const lastFiller = useRef(-1);
+   const startAbortRef = useRef(null);
+@@ -299,6 +301,7 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+     try {
+       // If the model's limit is hit, the interview waits here (clock stopped, answer kept) until a new model is mounted.
+       // The answer is stored server-side by the first attempt, so retries send no text (nothing is duplicated).
++      await resumeRef.current; // make sure the server has the session active before sending the answer
+       let resend = true;
+       const r = await guard(
+         async () => {
+@@ -405,12 +408,17 @@ export default function Interview({ cfg, meta, onFinished, onExit }) {
+ 
+   const pause = async () => {
+     clearTimers(); cancelSpeech(); voiceRef.current?.disarm(); go('paused');
+-    try { await api.pause(idRef.current); } catch (e) { setError(e.message); }
++    pauseRef.current = api.pause(idRef.current).catch((e) => { setError(e.message); });
++    await pauseRef.current;
+   };
+-  const resume = async () => {
+-    try { await api.resume(idRef.current); } catch (e) { setError(e.message); return; }
++  // Resume is optimistic: the interviewer starts speaking at once and the server is told in the background
++  // (the round trip used to delay everything by a few seconds). A failure puts the session back to paused.
++  const resume = () => {
+     setError('');
+     speakReply(lastSay.current || 'Let us continue.');
++    resumeRef.current = Promise.resolve(pauseRef.current)
++      .then(() => api.resume(idRef.current))
++      .catch((e) => { cancelSpeech(); clearTimers(); go('paused'); setError(e.message); });
+   };
+   const repeat = () => { voiceRef.current?.disarm(); speakReply(lastSay.current); };
+   const interrupt = () => { cancelSpeech(); beginListening(); };

@@ -1,0 +1,404 @@
+diff --git a/prisma/migrations/20261123000000_company_question_bank/migration.sql b/prisma/migrations/20261123000000_company_question_bank/migration.sql
+new file mode 100644
+index 0000000..1bf1075
+--- /dev/null
++++ b/prisma/migrations/20261123000000_company_question_bank/migration.sql
+@@ -0,0 +1,19 @@
++CREATE TABLE "CachedQuestion" (
++    "id" TEXT NOT NULL,
++    "company" TEXT NOT NULL,
++    "mode" TEXT NOT NULL,
++    "difficulty" TEXT NOT NULL,
++    "topic" TEXT,
++    "title" TEXT NOT NULL,
++    "titleKey" TEXT NOT NULL,
++    "spoken" TEXT NOT NULL DEFAULT '',
++    "board" TEXT NOT NULL DEFAULT '',
++    "source" TEXT NOT NULL DEFAULT 'live',
++    "uses" INTEGER NOT NULL DEFAULT 0,
++    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++
++    CONSTRAINT "CachedQuestion_pkey" PRIMARY KEY ("id")
++);
++
++CREATE UNIQUE INDEX "CachedQuestion_company_mode_titleKey_key" ON "CachedQuestion"("company", "mode", "titleKey");
++CREATE INDEX "CachedQuestion_company_mode_difficulty_idx" ON "CachedQuestion"("company", "mode", "difficulty");
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index e61dec3..2c1448b 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -163,3 +163,21 @@ model TopicStat {
+   @@unique([userId, topic])
+   @@index([userId, topic])
+ }
++
++// Shared, company-wise cache of interview questions (generic problem statements only; no candidate data).
++model CachedQuestion {
++  id String @id @default(uuid())
++  company String
++  mode String
++  difficulty String
++  topic String?
++  title String
++  titleKey String
++  spoken String @default("")
++  board String @default("")
++  source String @default("live")
++  uses Int @default(0)
++  createdAt DateTime @default(now())
++  @@unique([company, mode, titleKey])
++  @@index([company, mode, difficulty])
++}
+diff --git a/server/src/app.js b/server/src/app.js
+index ad34aa3..4d55d64 100644
+--- a/server/src/app.js
++++ b/server/src/app.js
+@@ -20,6 +20,7 @@ import { createAuthMiddleware } from './middleware/authMiddleware.js';
+ import { createAuthRouter } from './routes/auth.js';
+ import { secureApiRouter } from './routes/secureApi.js';
+ import { createPrismaRepo } from './services/prismaRepo.js';
++import { createQuestionBank, createMemoryBank, createPrismaBank } from './services/questionBank.js';
+ import { redactSecrets } from './utils/redact.js';
+ 
+ const here = dirname(fileURLToPath(import.meta.url));
+@@ -31,6 +32,8 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
+   const groq = createGroq({ config, fetchImpl, sleep, tracker });
+   const gemini = createGemini({ config, fetchImpl, sleep });
+   const theLlm = llm ?? createLlm({ config, groq, gemini });
++  // Company-wise question cache: persistent in production, in memory for the SQLite dev server and tests.
++  const bank = createQuestionBank({ store: prisma ? createPrismaBank(prisma) : createMemoryBank(), llm: theLlm, prefill: Boolean(prisma) });
+   const theStt = stt ?? createStt({ config, groq, tracker });
+ 
+   const app = express();
+@@ -49,9 +52,9 @@ export function createApp({ db, prisma, llm, stt, fetchImpl, sleep } = {}) {
+     const credentials = createCredentialService({ prisma, config, fetchImpl });
+     const requireAuth = createAuthMiddleware({ prisma, config });
+     app.use('/api/auth', createAuthRouter({ auth, credentials, config, requireAuth }));
+-    app.use('/api', requireAuth, secureApiRouter({ repoForUser: (userId) => createPrismaRepo(prisma, userId), llm: theLlm, stt: theStt, credentials, tracker }));
++    app.use('/api', requireAuth, secureApiRouter({ repoForUser: (userId) => createPrismaRepo(prisma, userId), llm: theLlm, stt: theStt, credentials, tracker, bank }));
+   } else {
+-    app.use('/api', apiRouter({ repo, tracker, stt: theStt, interviewer: createInterviewer({ repo, llm: theLlm }), evaluator: createEvaluator({ repo, llm: theLlm }) }));
++    app.use('/api', apiRouter({ repo, tracker, stt: theStt, interviewer: createInterviewer({ repo, llm: theLlm, bank }), evaluator: createEvaluator({ repo, llm: theLlm }) }));
+   }
+ 
+   const dist = resolve(here, '../../client/dist');
+diff --git a/server/src/routes/secureApi.js b/server/src/routes/secureApi.js
+index e0a38fd..0e80c63 100644
+--- a/server/src/routes/secureApi.js
++++ b/server/src/routes/secureApi.js
+@@ -20,7 +20,7 @@ async function configFor(body, repo) {
+   if (mode === 'project' && !projectId) throw err(400, 'Project Discussion needs one of your saved projects.');
+   return { mode, company, position, difficulty: b.difficulty, personality: b.personality, durationMin, style: STYLES[b.style] ? b.style : 'standard', round: COMPANIES[company].rounds.includes(b.round) ? b.round : COMPANIES[company].rounds[0], projectId };
+ }
+-export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
++export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker, bank = null }) {
+   const r = Router(), busy = new Set(), starts = createStartGuard(), interviewers = new Map();
+   const repo = (req) => repoForUser(req.userId);
+   const modelsFor = async (userId, keys = null) => catalogFor(config, await credentials.modelCatalog(userId, keys));
+@@ -33,7 +33,7 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
+     // unanswered-answer strikes were erased before every voice turn.
+     let interviewer = interviewers.get(req.userId);
+     if (!interviewer) {
+-      interviewer = createInterviewer({ repo: current, llm });
++      interviewer = createInterviewer({ repo: current, llm, bank });
+       interviewers.set(req.userId, interviewer);
+     }
+     return { repo: current, interviewer, evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys };
+diff --git a/server/src/services/interviewer.js b/server/src/services/interviewer.js
+index 65ebbea..b58a1ab 100644
+--- a/server/src/services/interviewer.js
++++ b/server/src/services/interviewer.js
+@@ -5,6 +5,7 @@ import { buildSystemPrompt, getInterviewerPersona } from './prompts.js';
+ import { pickFocus, seededRng } from './repo.js';
+ import { ProviderError } from './http.js';
+ import { isStrayInput } from './stray.js';
++import { normTitle } from './questionBank.js';
+ 
+ const MAX_CANDIDATE_CHARS = 4000;
+ export const NO_RESPONSE = '[NO RESPONSE]';
+@@ -82,7 +83,7 @@ export function parseInterviewerReply(raw) {
+   };
+ }
+ 
+-export function createInterviewer({ repo, llm, credentials = null }) {
++export function createInterviewer({ repo, llm, credentials = null, bank = null }) {
+   // Consecutive turns without a usable answer. In memory is fine for a personal tool.
+   const strikesById = new Map();
+   // Per-thread state: follow-ups since the last brand-new question and the recent satisfaction scores.
+@@ -140,6 +141,9 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+       recentSeeds: ctx.recentSeeds, sessionSeeds,
+       rng: seededRng(interviewId * 104729 + asked.length * 7919 + history.length * 31 + 17),
+     });
++    // Company-wise cached question for the next NEW main question (a cache read: no model call, usually no DB query).
++    const exclude = new Set([...ctx.titles, ...asked.map((a) => a.title)].map(normTitle));
++    const bankQuestion = bank ? await bank.pick({ company: iv.company, mode: iv.mode, level: blueprint.level, exclude, rng: seededRng(interviewId * 3571 + asked.length * 17 + history.length) }).catch(() => null) : null;
+     const plan = { total: planQuestions({ durationMin: iv.duration_min, style: iv.style, mode: iv.mode }), asked: asked.length };
+     const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
+     const clarification = isClarificationRequest(lastCand?.content);
+@@ -158,6 +162,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+       coveredTopics: [...new Set(asked.map((a) => a.topic).filter(Boolean))],
+       thread: { followups: thread.followups, sat: thread.sat.slice(-3), cap, min },
+       clarification,
++      bankQuestion,
+     });
+     const messages = history.length
+       ? toLlmMessages(history)
+@@ -214,6 +219,12 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+     // The theme is recorded with the question so later interviews rotate away from it.
+     const seed = reply.newQuestion && blueprint.seed ? blueprint.seed : undefined;
+     if (seed) ctx.usedSeeds.push(seed);
++    if (bank && reply.newQuestion && reply.questionTitle) {
++      if (bankQuestion && normTitle(reply.questionTitle) === normTitle(bankQuestion.title)) bank.markUsed(bankQuestion);
++      // Learn from live interviews. Only the title, topic, level and board text are kept: the spoken text can
++      // mention what the candidate just said, so it is never stored.
++      else bank.capture({ company: iv.company, mode: iv.mode, level: blueprint.level, topic: reply.topic, title: reply.questionTitle, board: reply.board, source: 'live' });
++    }
+     await Promise.all([
+       repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict || seed ? { analysis: reply.analysis, verdict: reply.verdict, seed } : null),
+       reply.newQuestion && reply.questionTitle ? repo.addQuestion(interviewId, iv.mode, reply.topic, reply.questionTitle, iv.difficulty) : null,
+@@ -249,6 +260,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
+       // Sessions created through the idempotent production path are only active
+       // once their first interviewer message exists.
+       await repo.setStatus(interviewId, 'active');
++      bank?.ensure({ company: cfg.company, mode: cfg.mode, credentials: requestCredentials, delayMs: 20_000 });
+       const persona = getInterviewerPersona(interviewId);
+       return { interview: await repo.getInterview(interviewId), reply, interviewer: persona };
+     } catch (e) {
+diff --git a/server/src/services/prompts.js b/server/src/services/prompts.js
+index d87d819..54cc28d 100644
+--- a/server/src/services/prompts.js
++++ b/server/src/services/prompts.js
+@@ -25,7 +25,7 @@ export function getInterviewerPersona(interviewId = 0) {
+ 
+ export function buildSystemPrompt({
+   interview, focusTopics = [], askedTitles = [], weaknesses = [], project = null, elapsedSec = 0, strikes = 0, maxStrikes = 5,
+-  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null, clarification = false,
++  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null, clarification = false, bankQuestion = null,
+ }) {
+   const mode = MODES[interview.mode];
+   const company = COMPANIES[interview.company] || COMPANIES.generic;
+@@ -113,6 +113,16 @@ export function buildSystemPrompt({
+       `Shape the question for ${company.name} and the ${interview.position} level, and adapt the wording freely: the theme is a starting point, not a script. If the candidate\'s project or earlier answers make the theme a poor fit, pick a closely related fresh theme, never a classic overused one.`,
+     );
+   }
++  if (bankQuestion) {
++    lines.push(
++      '',
++      `COMPANY QUESTION BANK (preferred source for your next NEW main question; ${company.name}, ${mode.label}, ${bankQuestion.difficulty}): title "${bankQuestion.title}"${bankQuestion.topic ? `, topic ${bankQuestion.topic}` : ''}. ` +
++        (bankQuestion.spoken ? `Original wording: "${clip(bankQuestion.spoken, 600)}" ` : 'Only the title and topic are known, so phrase the question yourself, stating the real problem aloud. ') +
++        (bankQuestion.board ? `Board text: ${clip(bankQuestion.board, 800)} ` : '') +
++        `When you pose a NEW main question, use this one instead of the blueprint theme: keep its substance, freshen the wording and numbers, and set question_title to exactly "${bankQuestion.title}". ` +
++        'Skip it only if it clearly does not suit the candidate\'s level or earlier answers. Never use it for counter-questions.',
++    );
++  }
+   if (askedTitles.length) lines.push(`Questions asked in past ${mode.label} interviews (avoid repeating): ${askedTitles.join('; ')}.`);
+   if (weaknesses.length) lines.push(`Recurring weaknesses from past ${mode.label} reports (probe only if they fit the current question naturally): ${weaknesses.join('; ')}.`);
+   if (project) lines.push('', `CANDIDATE PROJECT "${project.name}":\n${clip(project.description, 6000)}`);
+diff --git a/server/src/services/questionBank.js b/server/src/services/questionBank.js
+new file mode 100644
+index 0000000..19d8aa9
+--- /dev/null
++++ b/server/src/services/questionBank.js
+@@ -0,0 +1,142 @@
++import { extractJson } from './llm.js';
++import { MODES } from '../data/modes.js';
++import { COMPANIES } from '../data/companies.js';
++
++// Company-wise question cache.
++// - Questions are stored per (company, mode, difficulty) and shared by all users, so every interview for a company
++//   benefits from what earlier interviews (and one cheap background generation) produced.
++// - Only generic question data is stored: title, topic, difficulty and the problem statement. Never answers, never
++//   anything the candidate said, never Project Discussion questions.
++// - Reads go through an in-memory cache, so picking a question costs no database round-trip on most turns.
++
++const LEVELS = ['Easy', 'Medium', 'Hard'];
++const TARGET_PER_COMPANY_MODE = 10; // below this, one background call tops the bank up
++const LIST_TTL_MS = 5 * 60_000;
++const PREFILL_COOLDOWN_MS = 10 * 60_000;
++
++export const normTitle = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 120);
++const clip = (s, n) => String(s || '').trim().slice(0, n);
++
++/** In-memory store: used for the legacy SQLite dev server and in tests. */
++export function createMemoryBank() {
++  const rows = [];
++  let seq = 0;
++  return {
++    async list(company, mode) { return rows.filter((r) => r.company === company && r.mode === mode).sort((a, b) => a.uses - b.uses).slice(0, 80); },
++    async add(row) {
++      if (rows.some((r) => r.company === row.company && r.mode === row.mode && r.titleKey === row.titleKey)) return false;
++      rows.push({ id: `m${++seq}`, uses: 0, createdAt: new Date(), ...row });
++      return true;
++    },
++    async use(id) { const r = rows.find((x) => x.id === id); if (r) r.uses += 1; },
++    async count(company, mode) { return rows.filter((r) => r.company === company && r.mode === mode).length; },
++  };
++}
++
++/** Postgres store (Prisma model CachedQuestion). */
++export function createPrismaBank(prisma) {
++  return {
++    list: (company, mode) => prisma.cachedQuestion.findMany({ where: { company, mode }, orderBy: [{ uses: 'asc' }, { createdAt: 'desc' }], take: 80 }),
++    async add(row) {
++      try { await prisma.cachedQuestion.create({ data: row }); return true; }
++      catch (e) { if (e?.code === 'P2002') return false; throw e; } // already cached
++    },
++    async use(id) { await prisma.cachedQuestion.update({ where: { id }, data: { uses: { increment: 1 } } }).catch(() => {}); },
++    count: (company, mode) => prisma.cachedQuestion.count({ where: { company, mode } }),
++  };
++}
++
++export function createQuestionBank({ store, llm = null, prefill = false, now = Date.now, log = console }) {
++  const lists = new Map(); // `${company}:${mode}` -> { at, rows }
++  const inflight = new Set();
++  const cooldown = new Map();
++  const keyOf = (company, mode) => `${company}:${mode}`;
++
++  async function cachedList(company, mode) {
++    const k = keyOf(company, mode);
++    const hit = lists.get(k);
++    if (hit && now() - hit.at < LIST_TTL_MS) return hit.rows;
++    const rows = await store.list(company, mode);
++    lists.set(k, { at: now(), rows });
++    return rows;
++  }
++
++  /** Best unused question for this company, mode and level (an adjacent level is fine, a distant one is not). */
++  async function pick({ company, mode, level = 'Medium', exclude = new Set(), rng = Math.random }) {
++    if (mode === 'project') return null;
++    const free = (await cachedList(company, mode)).filter((r) => !exclude.has(r.titleKey));
++    if (!free.length) return null;
++    const dist = (r) => Math.abs(LEVELS.indexOf(r.difficulty) - LEVELS.indexOf(level));
++    const best = Math.min(...free.map(dist));
++    if (best > 1) return null;
++    const pool = free.filter((r) => dist(r) === best);
++    const weights = pool.map((r) => 1 / (1 + (r.uses || 0)));
++    let r = rng() * weights.reduce((a, b) => a + b, 0);
++    for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
++    return pool[pool.length - 1];
++  }
++
++  /** Saves a question. Duplicates and junk are ignored; never throws. */
++  async function capture({ company, mode, level = 'Medium', topic = '', title, spoken = '', board = '', source = 'live' }) {
++    try {
++      if (mode === 'project' || !MODES[mode]) return false;
++      const cleanTitle = clip(title, 120);
++      const titleKey = normTitle(cleanTitle);
++      if (cleanTitle.length < 6 || !titleKey) return false;
++      const ok = await store.add({
++        company, mode, difficulty: LEVELS.includes(level) ? level : 'Medium', topic: clip(topic, 80) || null,
++        title: cleanTitle, titleKey, spoken: clip(spoken, 900), board: clip(board, 2500), source,
++      });
++      if (ok) lists.delete(keyOf(company, mode));
++      return ok;
++    } catch (e) { log.warn?.(`[bank] could not save question: ${e.message}`); return false; }
++  }
++
++  function markUsed(row) {
++    if (!row?.id) return;
++    row.uses = (row.uses || 0) + 1; // keep the cached copy fresh
++    Promise.resolve(store.use(row.id)).catch(() => {});
++  }
++
++  /**
++   * Tops the bank up with company-specific questions in ONE background call, only while it holds fewer than
++   * TARGET_PER_COMPANY_MODE questions and at most once per 10 minutes. It runs after the interview has started,
++   * never blocks a turn, and never throws.
++   */
++  async function ensure({ company, mode, credentials = null, delayMs = 0 }) {
++    if (!prefill || !llm || mode === 'project' || !MODES[mode] || !COMPANIES[company]) return;
++    const k = keyOf(company, mode);
++    if (inflight.has(k) || (cooldown.get(k) || 0) > now()) return;
++    inflight.add(k);
++    const run = async () => {
++      try {
++        if ((await store.count(company, mode)) >= TARGET_PER_COMPANY_MODE) return;
++        cooldown.set(k, now() + PREFILL_COOLDOWN_MS);
++        const c = COMPANIES[company], m = MODES[mode];
++        const have = (await cachedList(company, mode)).map((r) => r.title).slice(0, 20);
++        const themes = (c.bank?.[mode] || []).slice(0, 12);
++        const system = [
++          `You write interview questions for ${c.name} ${m.label} interviews. Company style: ${c.style}`,
++          `Mode guidance: ${m.guidance}`,
++          themes.length ? `Company-specific themes to draw on: ${themes.join('; ')}.` : '',
++          have.length ? `Do not repeat or paraphrase these existing questions: ${have.join('; ')}.` : '',
++          'Return ONLY a JSON object: {"questions":[{"title": string (max 80 chars, unique), "topic": string (one of: ' + m.topics.join(', ') + '), "level": "Easy"|"Medium"|"Hard", "spoken": string (the question exactly as an interviewer would say it aloud: 2-5 sentences that state the real problem; no solution, no code), "board": string (constraints and examples, or "")}]}',
++          `Write 6 questions: 2 Easy, 2 Medium, 2 Hard. They must feel realistic for ${c.name}, differ clearly from each other, and contain no answers or solutions.`,
++        ].filter(Boolean).join('\n');
++        const res = await llm.chat({ system, messages: [{ role: 'user', content: 'Generate the questions.' }], json: false, maxTokens: 2200, temperature: 0.9, timeoutMs: 30_000, retries: 0, credentials });
++        const list = extractJson(res.text)?.questions;
++        if (!Array.isArray(list)) return;
++        for (const q of list.slice(0, 8)) {
++          if (typeof q?.title !== 'string' || typeof q?.spoken !== 'string' || q.spoken.trim().length < 30) continue;
++          const level = LEVELS.find((l) => l.toLowerCase() === String(q.level).toLowerCase()) || 'Medium';
++          await capture({ company, mode, level, topic: q.topic, title: q.title, spoken: q.spoken, board: q.board, source: 'generated' });
++        }
++      } catch (e) { log.warn?.(`[bank] prefill skipped: ${e.message}`); }
++      finally { inflight.delete(k); }
++    };
++    if (delayMs > 0) { const t = setTimeout(run, delayMs); t.unref?.(); return; }
++    await run();
++  }
++
++  return { pick, capture, markUsed, ensure };
++}
+diff --git a/server/test/questionBank.test.js b/server/test/questionBank.test.js
+new file mode 100644
+index 0000000..c7c01c2
+--- /dev/null
++++ b/server/test/questionBank.test.js
+@@ -0,0 +1,54 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createQuestionBank, createMemoryBank, normTitle } from '../src/services/questionBank.js';
++import { buildSystemPrompt } from '../src/services/prompts.js';
++
++const quiet = { warn() {} };
++const make = (extra = {}) => createQuestionBank({ store: createMemoryBank(), log: quiet, ...extra });
++
++test('bank dedupes by normalized title, never stores project questions, and rejects junk', async () => {
++  const bank = make();
++  assert.equal(await bank.capture({ company: 'google', mode: 'dsa', level: 'Hard', title: 'Word Ladder II' }), true);
++  assert.equal(await bank.capture({ company: 'google', mode: 'dsa', level: 'Hard', title: 'word   ladder ii!' }), false);
++  assert.equal(await bank.capture({ company: 'google', mode: 'project', title: 'My project question' }), false);
++  assert.equal(await bank.capture({ company: 'google', mode: 'dsa', title: 'abc' }), false);
++});
++
++test('pick is company-wise, honours the level and the exclusion list, and never serves a distant level', async () => {
++  const bank = make();
++  await bank.capture({ company: 'google', mode: 'dsa', level: 'Medium', title: 'Meeting Rooms Scheduler' });
++  await bank.capture({ company: 'amazon', mode: 'dsa', level: 'Medium', title: 'Warehouse Robot Paths' });
++  const g = await bank.pick({ company: 'google', mode: 'dsa', level: 'Medium' });
++  assert.equal(g.title, 'Meeting Rooms Scheduler');
++  assert.equal(await bank.pick({ company: 'google', mode: 'dsa', level: 'Medium', exclude: new Set([normTitle('Meeting Rooms Scheduler')]) }), null);
++  assert.equal(await bank.pick({ company: 'google', mode: 'dsa', level: 'Hard' }) !== null, true); // adjacent level is fine
++  const hard = make();
++  await hard.capture({ company: 'google', mode: 'dsa', level: 'Hard', title: 'Some Hard Problem' });
++  assert.equal(await hard.pick({ company: 'google', mode: 'dsa', level: 'Easy' }), null); // two levels away is not
++});
++
++test('prefill makes one background call, stores only valid questions, then respects the cooldown', async () => {
++  let calls = 0;
++  const llm = { chat: async () => { calls++; return { text: JSON.stringify({ questions: [
++    { title: 'Design a rate limiter for ads API', topic: 'Hashing', level: 'medium', spoken: 'Design a rate limiter that protects an ads API from bursts while staying fair across advertisers.', board: 'Constraints: 50k rps.' },
++    { title: 'Too short', spoken: 'x' },
++    { title: 'Missing spoken text entirely' },
++  ] }) }; } };
++  const bank = make({ llm, prefill: true });
++  await bank.ensure({ company: 'google', mode: 'dsa' });
++  await bank.ensure({ company: 'google', mode: 'dsa' }); // inside the cooldown: no second call
++  assert.equal(calls, 1);
++  const q = await bank.pick({ company: 'google', mode: 'dsa', level: 'Medium' });
++  assert.equal(q.title, 'Design a rate limiter for ads API');
++  assert.equal(q.source, 'generated');
++  const off = make({ llm, prefill: false });
++  await off.ensure({ company: 'google', mode: 'dsa' });
++  assert.equal(calls, 1); // prefill disabled (dev SQLite server and tests)
++});
++
++test('the prompt carries the company bank question and asks for its exact title', () => {
++  const base = { id: 3, mode: 'dsa', company: 'google', position: 'SDE Intern', difficulty: 'Medium', personality: 'real', duration_min: 30, style: 'standard', round: 'Technical' };
++  const p = buildSystemPrompt({ interview: base, bankQuestion: { title: 'Meeting Rooms Scheduler', difficulty: 'Medium', topic: 'Intervals', spoken: 'Given meeting times, find the minimum rooms.', board: '' } });
++  assert.ok(p.includes('COMPANY QUESTION BANK') && p.includes('question_title to exactly "Meeting Rooms Scheduler"'));
++  assert.ok(!buildSystemPrompt({ interview: base }).includes('COMPANY QUESTION BANK'));
++});

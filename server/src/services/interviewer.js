@@ -5,6 +5,7 @@ import { buildSystemPrompt, getInterviewerPersona } from './prompts.js';
 import { pickFocus, seededRng } from './repo.js';
 import { ProviderError } from './http.js';
 import { isStrayInput } from './stray.js';
+import { normTitle } from './questionBank.js';
 
 const MAX_CANDIDATE_CHARS = 4000;
 export const NO_RESPONSE = '[NO RESPONSE]';
@@ -43,12 +44,25 @@ function toLlmMessages(history) {
   });
 }
 
+// If the JSON was cut off after the spoken part, the spoken part is still usable.
+function salvageSay(raw) {
+  const m = /"say"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(String(raw || ''));
+  if (!m) return '';
+  try { return JSON.parse(`"${m[1]}"`).trim(); } catch { return m[1].trim(); }
+}
+
 export function parseInterviewerReply(raw) {
   const j = extractJson(raw);
   const say = typeof j?.say === 'string' ? j.say.trim() : null;
   const verdict = typeof j?.verdict === 'string' && VERDICTS.has(j.verdict.trim().toLowerCase()) ? j.verdict.trim().toLowerCase() : '';
   const analysis = typeof j?.analysis === 'string' ? j.analysis.trim().slice(0, 600) : '';
   if (!j || (!say && verdict !== 'stray')) {
+    const text0 = String(raw || '');
+    const salvaged = salvageSay(text0);
+    const looksLikeJson = /^\s*[{`]/.test(text0) || /"(analysis|verdict|say)"\s*:/.test(text0);
+    // A truncated JSON blob must never be read aloud: salvage the spoken part or fail so the caller can retry.
+    if (!salvaged && looksLikeJson) throw new ProviderError('The interviewer reply was cut off before its spoken part.', 502);
+    if (salvaged) return { say: salvaged, analysis: '', verdict: '', board: '', topic: '', newQuestion: false, questionTitle: '', hintGiven: false, wrapUp: false, candidateStuck: false, endInterview: false, satisfaction: null };
     // Model ignored the JSON contract: speak the plain text rather than failing the turn.
     const plain = String(raw || '').replace(/[`*#]/g, '').trim();
     return { say: plain || 'Could you say that again?', analysis: '', verdict: '', board: '', topic: '', newQuestion: false, questionTitle: '', hintGiven: false, wrapUp: false, candidateStuck: false, endInterview: false, satisfaction: null };
@@ -69,11 +83,14 @@ export function parseInterviewerReply(raw) {
   };
 }
 
-export function createInterviewer({ repo, llm, credentials = null }) {
+export function createInterviewer({ repo, llm, credentials = null, bank = null }) {
   // Consecutive turns without a usable answer. In memory is fine for a personal tool.
   const strikesById = new Map();
   // Per-thread state: follow-ups since the last brand-new question and the recent satisfaction scores.
   const threadById = new Map();
+  // Past-interview context (seeds, titles, weaknesses, project) cannot change mid-session: load it once per interview.
+  const contextById = new Map();
+  const lastModelById = new Map();
 
   async function ask(system, messages, request = {}) {
     // Secure routes keep one interviewer instance per user so its conversation
@@ -86,28 +103,47 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     // GPT-OSS currently rejects some otherwise-valid generations when Groq's
     // server-side JSON validator is enabled. The prompt still requests JSON,
     // while extractJson() handles fenced/prose-wrapped responses locally.
-    const res = await llm.chat({ system, messages, json: false, maxTokens: 480, temperature: 0.45, credentials: requestCredentials ?? credentials, ...llmRequest });
-    return { res, reply: parseInterviewerReply(res.text) };
+    // Reasoning models count hidden thinking against max_tokens, so the budget is generous; it is a cap, not a delay.
+    // hedgeMs: if the first model is slow, a second one is asked in parallel and the faster answer wins.
+    const call = (maxTokens) => llm.chat({ system, messages, json: false, maxTokens, temperature: 0.45, hedgeMs: 6000, timeoutMs: 14_000, retries: 1, credentials: requestCredentials ?? credentials, ...llmRequest });
+    let res = await call(900);
+    let reply;
+    try { reply = parseInterviewerReply(res.text); }
+    catch { res = await call(1600); reply = parseInterviewerReply(res.text); } // cut off: one retry with more room
+    return { res, reply };
   }
 
   async function generate(interviewId, elapsedSec = 0, request = {}) {
     const iv = await repo.getInterview(interviewId);
     const mode = MODES[iv.mode];
-    const history = await repo.getMessages(interviewId, 12);
-    const asked = await repo.interviewQuestions(interviewId);
+    let ctx = contextById.get(interviewId);
+    const [history, asked, topicStats, loaded] = await Promise.all([
+      repo.getMessages(interviewId, 12),
+      repo.interviewQuestions(interviewId),
+      repo.topicStats(iv.mode),
+      ctx ? null : Promise.all([repo.recentSeeds(iv.mode, 150), repo.recentQuestionTitles(iv.mode, 40), repo.recentWeaknesses(3, 6, iv.mode), iv.project_id ? repo.getProject(iv.project_id) : null]),
+    ]);
+    if (!ctx) {
+      ctx = { recentSeeds: loaded[0], titles: loaded[1].map((t) => t.slice(0, 90)), weaknesses: loaded[2], project: loaded[3], usedSeeds: [] };
+      if (contextById.size > 200) contextById.delete(contextById.keys().next().value);
+      contextById.set(interviewId, ctx);
+    }
     const thread = threadById.get(interviewId) || { followups: 0, sat: [] };
     const cap = FOLLOWUP_CAP[iv.style] || 3;
     const min = Math.min(MIN_PROBES[iv.style] ?? 2, cap);
     // The seed changes with every new question, so the topic focus rotates instead of staying fixed all interview.
     const rng = seededRng(interviewId * 7919 + asked.length * 131);
-    const focusTopics = pickFocus(mode.topics, await repo.topicStats(iv.mode), iv.mode, 3, rng);
+    const focusTopics = pickFocus(mode.topics, topicStats, iv.mode, 3, rng);
     // Blueprint for the next main question: a fresh theme (rotated across past interviews), an angle and a difficulty level.
-    const sessionSeeds = history.map(parseMeta).map((m) => m?.seed).filter(Boolean);
+    const sessionSeeds = [...new Set([...history.map(parseMeta).map((m) => m?.seed).filter(Boolean), ...ctx.usedSeeds])];
     const blueprint = pickBlueprint({
       mode: iv.mode, company: iv.company, difficulty: iv.difficulty, askedCount: asked.length, sat: thread.sat,
-      recentSeeds: await repo.recentSeeds(iv.mode, 150), sessionSeeds,
+      recentSeeds: ctx.recentSeeds, sessionSeeds,
       rng: seededRng(interviewId * 104729 + asked.length * 7919 + history.length * 31 + 17),
     });
+    // Company-wise cached question for the next NEW main question (a cache read: no model call, usually no DB query).
+    const exclude = new Set([...ctx.titles, ...asked.map((a) => a.title)].map(normTitle));
+    const bankQuestion = bank ? await bank.pick({ company: iv.company, mode: iv.mode, level: blueprint.level, exclude, rng: seededRng(interviewId * 3571 + asked.length * 17 + history.length) }).catch(() => null) : null;
     const plan = { total: planQuestions({ durationMin: iv.duration_min, style: iv.style, mode: iv.mode }), asked: asked.length };
     const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
     const clarification = isClarificationRequest(lastCand?.content);
@@ -116,9 +152,9 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       focusTopics,
       blueprint,
       plan,
-      askedTitles: (await repo.recentQuestionTitles(iv.mode, 40)).map((t) => t.slice(0, 90)),
-      weaknesses: await repo.recentWeaknesses(3, 6, iv.mode),
-      project: iv.project_id ? await repo.getProject(iv.project_id) : null,
+      askedTitles: ctx.titles,
+      weaknesses: ctx.weaknesses,
+      project: ctx.project,
       elapsedSec,
       strikes: strikesById.get(interviewId) || 0,
       maxStrikes: MAX_STRIKES,
@@ -126,6 +162,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       coveredTopics: [...new Set(asked.map((a) => a.topic).filter(Boolean))],
       thread: { followups: thread.followups, sat: thread.sat.slice(-3), cap, min },
       clarification,
+      bankQuestion,
     });
     const messages = history.length
       ? toLlmMessages(history)
@@ -133,7 +170,8 @@ export function createInterviewer({ repo, llm, credentials = null }) {
 
     let { res, reply } = await ask(system, messages, request);
 
-    // Guardrails: up to two corrective retries when the model closes early, skips the counter-question or judges without evidence.
+    // Guardrail: one corrective retry, only when the model tries to close the interview early. The old extra retries
+    // (min probes, thin analysis) each cost a full LLM call, which is what made turns take 20-30 s.
     const genuine = lastCand && lastCand.content !== NO_RESPONSE;
     const remainingMin = iv.duration_min - elapsedSec / 60;
     const timeLeft = remainingMin > iv.duration_min * 0.2;
@@ -146,16 +184,10 @@ export function createInterviewer({ repo, llm, credentials = null }) {
           : `Pose a NEW main question now, built from the blueprint theme "${blueprint.seed || 'any fresh topic of this mode'}" (angle: ${blueprint.angle}); set new_question true with a short question_title.`;
         return `You tried to close the interview with about ${Math.round(remainingMin)} minutes left. Do NOT conclude, thank the candidate for their time or say goodbye. Set wrap_up false. ${how}`;
       }
-      if (!clarification && genuine && r.newQuestion && !r.candidateStuck && r.verdict !== 'stray' && thread.followups < min && timeLeft && !r.wrapUp) {
-        return `You moved to a new question after only ${thread.followups} follow-up(s); at least ${min} are required. Do NOT change the question. Re-read the candidate's last answer and ask ONE counter-question about a specific claim, gap, edge case or trade-off in it. Set new_question false.`;
-      }
-      if (genuine && ['incorrect', 'unclear'].includes(r.verdict) && r.analysis.length < 30) {
-        return 'You judged the last answer incorrect or unclear without naming the specific statement or gap. Re-analyse it carefully: quote what the candidate actually said, decide what is right and what is wrong, and only then reply. If the answer was merely incomplete, say so and ask a targeted counter-question.';
-      }
       return '';
     };
     let corrections = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 1; attempt++) {
       const c = diagnose(reply);
       if (!c) break;
       corrections += `\n\nCORRECTION: ${c}`;
@@ -186,14 +218,25 @@ export function createInterviewer({ repo, llm, credentials = null }) {
 
     // The theme is recorded with the question so later interviews rotate away from it.
     const seed = reply.newQuestion && blueprint.seed ? blueprint.seed : undefined;
-    await repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict || seed ? { analysis: reply.analysis, verdict: reply.verdict, seed } : null);
-    if (reply.newQuestion && reply.questionTitle) {
-      await repo.addQuestion(interviewId, iv.mode, reply.topic, reply.questionTitle, iv.difficulty);
+    if (seed) ctx.usedSeeds.push(seed);
+    if (bank && reply.newQuestion && reply.questionTitle) {
+      if (bankQuestion && normTitle(reply.questionTitle) === normTitle(bankQuestion.title)) bank.markUsed(bankQuestion);
+      // Learn from live interviews. Only the title, topic, level and board text are kept: the spoken text can
+      // mention what the candidate just said, so it is never stored.
+      else bank.capture({ company: iv.company, mode: iv.mode, level: blueprint.level, topic: reply.topic, title: reply.questionTitle, board: reply.board, source: 'live' });
     }
-    if (reply.hintGiven) await repo.bumpHint(interviewId);
+    await Promise.all([
+      repo.addMessage(interviewId, 'interviewer', reply.say, reply.board, reply.analysis || reply.verdict || seed ? { analysis: reply.analysis, verdict: reply.verdict, seed } : null),
+      reply.newQuestion && reply.questionTitle ? repo.addQuestion(interviewId, iv.mode, reply.topic, reply.questionTitle, iv.difficulty) : null,
+      reply.hintGiven ? repo.bumpHint(interviewId) : null,
+    ]);
+    // Tell the candidate when another model answered, instead of switching silently.
+    const prevModel = lastModelById.get(interviewId);
+    lastModelById.set(interviewId, res.model);
+    const notice = res.primaryModel && res.model !== res.primaryModel && prevModel !== res.model ? `Switched to ${res.model} for this turn because ${res.primaryModel} was slow or unavailable.` : '';
     const { analysis, ...publicReply } = reply;
     const persona = getInterviewerPersona(interviewId);
-    return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model };
+    return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model, notice };
   }
 
   async function start(cfg, { startRequestKey = null, signal, credentials: requestCredentials = null } = {}) {
@@ -217,6 +260,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       // Sessions created through the idempotent production path are only active
       // once their first interviewer message exists.
       await repo.setStatus(interviewId, 'active');
+      bank?.ensure({ company: cfg.company, mode: cfg.mode, credentials: requestCredentials, delayMs: 20_000 });
       const persona = getInterviewerPersona(interviewId);
       return { interview: await repo.getInterview(interviewId), reply, interviewer: persona };
     } catch (e) {

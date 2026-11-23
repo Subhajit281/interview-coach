@@ -2,6 +2,7 @@ import { decryptSecret, encryptSecret } from '../utils/encryption.js';
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const clean = (value) => String(value || '').trim();
 const modelCache = new Map();
+const refreshing = new Set();
 const CACHE_MS = 5 * 60 * 1000;
 const label = (id) => id.replace(/^models\//, '').split(/[-/]/).map((x) => x ? x[0].toUpperCase() + x.slice(1) : '').join(' ');
 const geminiChatModel = (model) => model.name?.startsWith('models/gemini-')
@@ -66,16 +67,25 @@ export function createCredentialService({ prisma, config, fetchImpl = fetch }) {
     async modelCatalog(userId, suppliedKeys = null) {
       const cached = modelCache.get(userId);
       if (cached && cached.expiresAt > Date.now()) return cached.value;
-      const keys = suppliedKeys || await this.resolve(userId);
-      const entries = await Promise.all(['groq', 'gemini'].map(async (provider) => {
-        const apiKey = provider === 'groq' ? keys.groqKey : keys.geminiKey;
-        if (!apiKey) return [provider, []];
-        try { return [provider, await providerModels(fetchImpl, provider, apiKey)]; }
-        catch (error) { return [provider, { error: error.message }]; }
-      }));
-      const value = Object.fromEntries(entries);
-      modelCache.set(userId, { value, expiresAt: Date.now() + CACHE_MS });
-      return value;
+      const refresh = async () => {
+        const keys = suppliedKeys || await this.resolve(userId);
+        const entries = await Promise.all(['groq', 'gemini'].map(async (provider) => {
+          const apiKey = provider === 'groq' ? keys.groqKey : keys.geminiKey;
+          if (!apiKey) return [provider, []];
+          try { return [provider, await providerModels(fetchImpl, provider, apiKey)]; }
+          catch (error) { return [provider, { error: error.message }]; }
+        }));
+        const value = Object.fromEntries(entries);
+        modelCache.set(userId, { value, expiresAt: Date.now() + CACHE_MS });
+        return value;
+      };
+      // Stale-while-revalidate: an expired list is served immediately and refreshed in the background,
+      // so every 5th minute no longer adds two provider round-trips to the interviewer's reply.
+      if (cached) {
+        if (!refreshing.has(userId)) { refreshing.add(userId); refresh().catch(() => {}).finally(() => refreshing.delete(userId)); }
+        return cached.value;
+      }
+      return refresh();
     },
   };
 }

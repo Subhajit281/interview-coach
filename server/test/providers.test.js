@@ -100,3 +100,35 @@ test('stt skips Whisper when the browser heard no real voice, and drops vocabula
   assert.equal(await stt.transcribe({ buffer, mime: 'audio/webm', durationSec: 6, voicedSec: 1.0 }), '');
   assert.equal(isPromptEcho('I would use a hash map and two pointers'), false);
 });
+
+test('llm hedges: a slow primary model is raced by the fallback and the faster reply wins', async () => {
+  const { createLlm } = await import('../src/services/llm.js');
+  const slow = { chat: async ({ model, signal }) => new Promise((res, rej) => { const t = setTimeout(() => res({ text: 'slow', provider: 'groq', model }), 400); signal?.addEventListener('abort', () => { clearTimeout(t); rej(new Error('aborted')); }); }) };
+  const fast = { chat: async ({ model }) => ({ text: 'fast', provider: 'gemini', model }) };
+  const llm = createLlm({ config: { allowDevelopmentProviderKeys: false, groq: {}, gemini: {} }, groq: slow, gemini: fast, log: {} });
+  const credentials = { groqKey: 'g', geminiKey: 'm', models: { groq: 'a', gemini: 'b' } };
+  const t0 = Date.now();
+  const r = await llm.chat({ system: 's', messages: [{ role: 'user', content: 'x' }], credentials, hedgeMs: 40 });
+  assert.equal(r.text, 'fast');
+  assert.equal(r.primaryModel, 'a');
+  assert.ok(Date.now() - t0 < 300);
+});
+
+test('a cut-off JSON reply is never read aloud: the spoken part is salvaged or the parse fails', async () => {
+  const { parseInterviewerReply } = await import('../src/services/interviewer.js');
+  assert.equal(parseInterviewerReply('{"analysis":"ok","verdict":"none","say":"Please explain a hash map.","board":"Cons'.slice(0, 80)).say, 'Please explain a hash map.');
+  assert.throws(() => parseInterviewerReply('{"analysis": "The candidate said that the'), /cut off/);
+  assert.equal(parseInterviewerReply('Just plain words.').say, 'Just plain words.');
+});
+
+test('groq retries the same model once when gpt-oss returns an unparseable or empty reply', async () => {
+  const { createGroq } = await import('../src/services/groq.js');
+  const res = (status, body) => ({ ok: status < 400, status, headers: { get: () => null }, text: async () => JSON.stringify(body), json: async () => body });
+  const seq = [res(400, { error: { code: 'output_parse_failed', message: 'Parsing failed.' } }), res(200, { choices: [{ message: { content: '' }, finish_reason: 'stop' }] }), res(200, { choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }] })];
+  let calls = 0;
+  const groq = createGroq({ config: { groq: { apiKey: 'k' } }, fetchImpl: async () => seq[calls++], sleep: async () => {} });
+  await assert.rejects(() => groq.chat({ model: 'openai/gpt-oss-20b', system: 's', messages: [{ role: 'user', content: 'x' }] }), /empty reply/); // 400 then empty: both attempts used
+  assert.equal(calls, 2);
+  const ok = await groq.chat({ model: 'openai/gpt-oss-20b', system: 's', messages: [{ role: 'user', content: 'x' }] });
+  assert.equal(ok.text, 'hello');
+});

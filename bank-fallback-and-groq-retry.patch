@@ -1,0 +1,132 @@
+diff --git a/server/src/services/groq.js b/server/src/services/groq.js
+index 9d2b96f..9eeaf51 100644
+--- a/server/src/services/groq.js
++++ b/server/src/services/groq.js
+@@ -21,19 +21,28 @@ export function createGroq({ config, fetchImpl = fetch, sleep, tracker }) {
+     if (json) body.response_format = { type: 'json_object' };
+     if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
+ 
+-    const res = await fetchWithRetry(
+-      `${BASE}/chat/completions`,
+-      { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
+-      opts(`Groq ${model}`, { timeoutMs, retries }),
+-    );
+-    tracker?.record('groq', model, res.headers);
+-    const data = await res.json();
+-    const choice = data.choices?.[0];
+-    const text = choice?.message?.content ?? '';
+-    // Reasoning models spend max_tokens on hidden thinking. An empty reply must fail over to the next model
+-    // instead of reaching the interviewer as "no answer" (this was the silent failure).
+-    if (!text.trim()) throw new ProviderError(`Groq ${model}: empty reply (${choice?.finish_reason || 'no content'}); its token budget was probably used up by reasoning`, 502);
+-    return { text, provider: 'groq', model, truncated: choice?.finish_reason === 'length' };
++    const once = async () => {
++      const res = await fetchWithRetry(
++        `${BASE}/chat/completions`,
++        { method: 'POST', headers: { ...auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
++        opts(`Groq ${model}`, { timeoutMs, retries }),
++      );
++      tracker?.record('groq', model, res.headers);
++      const data = await res.json();
++      const choice = data.choices?.[0];
++      const text = choice?.message?.content ?? '';
++      // Reasoning models spend max_tokens on hidden thinking. An empty reply must fail over to the next model
++      // instead of reaching the interviewer as "no answer" (this was the silent failure).
++      if (!text.trim()) throw new ProviderError(`Groq ${model}: empty reply (${choice?.finish_reason || 'no content'}); its token budget was probably used up by reasoning`, 502);
++      return { text, provider: 'groq', model, truncated: choice?.finish_reason === 'length' };
++    };
++    // gpt-oss on Groq sometimes returns nothing parseable (HTTP 400 output_parse_failed, or an empty reply).
++    // These are transient: retry the same model once, quickly, before the router escalates to a bigger model.
++    try { return await once(); }
++    catch (e) {
++      if (signal?.aborted || !(e instanceof ProviderError) || !/output_parse_failed|Parsing failed|empty reply/.test(e.message)) throw e;
++      return once();
++    }
+   }
+ 
+   async function transcribe({ buffer, mime = 'audio/webm', filename = 'audio.webm', apiKey }) {
+diff --git a/server/src/services/questionBank.js b/server/src/services/questionBank.js
+index 19d8aa9..6758ef7 100644
+--- a/server/src/services/questionBank.js
++++ b/server/src/services/questionBank.js
+@@ -33,16 +33,36 @@ export function createMemoryBank() {
+   };
+ }
+ 
+-/** Postgres store (Prisma model CachedQuestion). */
+-export function createPrismaBank(prisma) {
++/**
++ * Postgres store (Prisma model CachedQuestion). If the Prisma client has not been regenerated or the migration has not
++ * been applied yet, it quietly falls back to an in-memory cache and says how to enable the persistent one, instead of
++ * failing on every question.
++ */
++export function createPrismaBank(prisma, { log = console } = {}) {
++  const fallback = createMemoryBank();
++  let useFallback = false;
++  let warned = false;
++  const degrade = (why) => {
++    useFallback = true;
++    if (!warned) { warned = true; log.warn?.(`[bank] using an in-memory question cache (${why}). Run "npx prisma generate" and "npx prisma migrate deploy" to enable the persistent one.`); }
++  };
++  if (!prisma?.cachedQuestion) degrade('the Prisma client has no CachedQuestion model');
++  const guard = async (fn, fb) => {
++    if (useFallback) return fb();
++    try { return await fn(); }
++    catch (e) {
++      if (e?.code === 'P2021' || e?.code === 'P2022' || e instanceof TypeError) { degrade(e.code || e.message); return fb(); }
++      throw e;
++    }
++  };
+   return {
+-    list: (company, mode) => prisma.cachedQuestion.findMany({ where: { company, mode }, orderBy: [{ uses: 'asc' }, { createdAt: 'desc' }], take: 80 }),
+-    async add(row) {
++    list: (company, mode) => guard(() => prisma.cachedQuestion.findMany({ where: { company, mode }, orderBy: [{ uses: 'asc' }, { createdAt: 'desc' }], take: 80 }), () => fallback.list(company, mode)),
++    add: (row) => guard(async () => {
+       try { await prisma.cachedQuestion.create({ data: row }); return true; }
+       catch (e) { if (e?.code === 'P2002') return false; throw e; } // already cached
+-    },
+-    async use(id) { await prisma.cachedQuestion.update({ where: { id }, data: { uses: { increment: 1 } } }).catch(() => {}); },
+-    count: (company, mode) => prisma.cachedQuestion.count({ where: { company, mode } }),
++    }, () => fallback.add(row)),
++    use: (id) => guard(() => prisma.cachedQuestion.update({ where: { id }, data: { uses: { increment: 1 } } }).catch(() => {}), () => fallback.use(id)),
++    count: (company, mode) => guard(() => prisma.cachedQuestion.count({ where: { company, mode } }), () => fallback.count(company, mode)),
+   };
+ }
+ 
+diff --git a/server/test/providers.test.js b/server/test/providers.test.js
+index 8a6aeda..3b93987 100644
+--- a/server/test/providers.test.js
++++ b/server/test/providers.test.js
+@@ -120,3 +120,15 @@ test('a cut-off JSON reply is never read aloud: the spoken part is salvaged or t
+   assert.throws(() => parseInterviewerReply('{"analysis": "The candidate said that the'), /cut off/);
+   assert.equal(parseInterviewerReply('Just plain words.').say, 'Just plain words.');
+ });
++
++test('groq retries the same model once when gpt-oss returns an unparseable or empty reply', async () => {
++  const { createGroq } = await import('../src/services/groq.js');
++  const res = (status, body) => ({ ok: status < 400, status, headers: { get: () => null }, text: async () => JSON.stringify(body), json: async () => body });
++  const seq = [res(400, { error: { code: 'output_parse_failed', message: 'Parsing failed.' } }), res(200, { choices: [{ message: { content: '' }, finish_reason: 'stop' }] }), res(200, { choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }] })];
++  let calls = 0;
++  const groq = createGroq({ config: { groq: { apiKey: 'k' } }, fetchImpl: async () => seq[calls++], sleep: async () => {} });
++  await assert.rejects(() => groq.chat({ model: 'openai/gpt-oss-20b', system: 's', messages: [{ role: 'user', content: 'x' }] }), /empty reply/); // 400 then empty: both attempts used
++  assert.equal(calls, 2);
++  const ok = await groq.chat({ model: 'openai/gpt-oss-20b', system: 's', messages: [{ role: 'user', content: 'x' }] });
++  assert.equal(ok.text, 'hello');
++});
+diff --git a/server/test/questionBank.test.js b/server/test/questionBank.test.js
+index c7c01c2..872151b 100644
+--- a/server/test/questionBank.test.js
++++ b/server/test/questionBank.test.js
+@@ -52,3 +52,13 @@ test('the prompt carries the company bank question and asks for its exact title'
+   assert.ok(p.includes('COMPANY QUESTION BANK') && p.includes('question_title to exactly "Meeting Rooms Scheduler"'));
+   assert.ok(!buildSystemPrompt({ interview: base }).includes('COMPANY QUESTION BANK'));
+ });
++
++test('prisma bank falls back to memory (with one warning) when the client has no CachedQuestion model', async () => {
++  const { createPrismaBank } = await import('../src/services/questionBank.js');
++  const warnings = [];
++  const bank = createQuestionBank({ store: createPrismaBank({}, { log: { warn: (m) => warnings.push(m) } }), log: quiet });
++  assert.equal(await bank.capture({ company: 'google', mode: 'dsa', level: 'Medium', title: 'Meeting Rooms Scheduler' }), true);
++  assert.equal((await bank.pick({ company: 'google', mode: 'dsa', level: 'Medium' })).title, 'Meeting Rooms Scheduler');
++  assert.equal(warnings.length, 1);
++  assert.match(warnings[0], /prisma generate/);
++});
