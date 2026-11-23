@@ -7,7 +7,7 @@ const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-in
 // Start with the lighter models: a voice-interview turn is short and latency
 // matters more than maximum benchmark quality. The UI replaces these defaults
 // with models discovered from the signed-in user's own provider key.
-const configuredGroqModel = env.GROQ_LLM_MODEL || 'openai/gpt-oss-20b';
+const configuredGroqModel = env.GROQ_LLM_MODEL || 'qwen/qwen3.8-27b';
 const configuredGroqFallback = env.GROQ_LLM_FALLBACK_MODEL || 'openai/gpt-oss-120b';
 const groqModel = RETIRED_GROQ_MODELS.has(configuredGroqModel) ? 'openai/gpt-oss-20b' : configuredGroqModel;
 const groqFallbackModel = RETIRED_GROQ_MODELS.has(configuredGroqFallback) || configuredGroqFallback === groqModel ? 'openai/gpt-oss-120b' : configuredGroqFallback;

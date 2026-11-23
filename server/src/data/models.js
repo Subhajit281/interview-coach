@@ -22,7 +22,7 @@ const fail = (message, code, extra = {}) => Object.assign(new Error(message), { 
 
 /** Catalog for the UI. The server default is always included so the dropdown can show what is active. */
 const preferred = {
-  groq: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b'],
+  groq: ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
   gemini: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
 };
 
