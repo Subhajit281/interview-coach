@@ -56,7 +56,11 @@ export function createAuthService({ prisma, config }) {
     async refresh(token) {
       const row = await prisma.refreshToken.findUnique({ where: { tokenHash: digest(token) }, include: { user: true } });
       if (!row || row.revoked || row.expiresAt <= new Date()) throw fail('Session expired. Please log in again.', 401);
-      await prisma.refreshToken.update({ where: { id: row.id }, data: { revoked: true } });
+      // Claim this token atomically. A pair of concurrent browser requests or
+      // tabs can both read the old row; only one may rotate it and issue the
+      // replacement session.
+      const claimed = await prisma.refreshToken.updateMany({ where: { id: row.id, revoked: false }, data: { revoked: true } });
+      if (claimed.count !== 1) throw fail('Session expired. Please log in again.', 401);
       return issue(row.user);
     },
     revokeRefreshToken: (token) => prisma.refreshToken.updateMany({ where: { tokenHash: digest(token), revoked: false }, data: { revoked: true } }),

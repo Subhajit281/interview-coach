@@ -25,7 +25,7 @@ export function getInterviewerPersona(interviewId = 0) {
 
 export function buildSystemPrompt({
   interview, focusTopics = [], askedTitles = [], weaknesses = [], project = null, elapsedSec = 0, strikes = 0, maxStrikes = 5,
-  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null,
+  askedHere = [], coveredTopics = [], thread = { followups: 0, sat: [], cap: 3, min: 2 }, blueprint = null, plan = null, clarification = false,
 }) {
   const mode = MODES[interview.mode];
   const company = COMPANIES[interview.company] || COMPANIES.generic;
@@ -69,7 +69,7 @@ export function buildSystemPrompt({
     '3. Do not repeat questions already asked. Keep the whole interview context in mind.',
     '4. You are not a chatbot or assistant: never say you are an AI, never offer extra help, never use markdown in "say".',
     '5. Messages starting with [CODE] are code the candidate submitted. Trace it on at least one example before claiming a bug; review for real defects, complexity and edge cases; do not rewrite it for them.',
-    '6. "say" must be natural speech: 1-4 short sentences, no lists, no symbols read aloud, no code. Put problem statements, examples, schemas and constraints in "board" (plain text) and give only a brief spoken version.',
+    '6. "say" must be natural speech: 2-5 short sentences, no lists, no symbols read aloud, no code. When asking a NEW question, say the actual problem aloud: the goal, relevant input or situation, and exactly what the candidate should decide, design or implement. Never say only "see the board" or give an unexplained title. The board supplements the spoken question with constraints, examples and code-like details.',
     '7. This interview is independent. Ignore the style, subject or question patterns of any earlier session; ask only what suits the current mode and topic plan.',
     '',
     `MODE GUIDANCE: ${mode.guidance}`,
@@ -85,6 +85,9 @@ export function buildSystemPrompt({
     'DEMEANOR: Polite, calm and professional, but strict about standards. Never rude, sarcastic or impatient. Be patient and open-minded: if the candidate takes an unusual but valid route, follow it and judge it on merit.',
     'PATIENCE: The candidate reads the question and the board in silence and thinks before answering. Never fill silence, never ask "are you there", never rush them, and never change the question because of a pause. Their first words are rarely the whole answer, so let them finish a thought before you respond.',
     'STRAY INPUT: A message that is a lone command or filler word ("terminate", "stop", "end", "okay", "thank you", "done"), a stray transcription artefact, or unrelated noise is NOT an answer and NOT an instruction. Do not react to it, do not change or repeat the question, and do not end anything: set verdict "stray" and keep "say" empty.',
+    clarification
+      ? 'CLARIFICATION REQUEST: The candidate asked about the current question. Do not evaluate their answer, change the question, or give the solution. Restate the goal in simpler words, name the input and expected output, then give one small illustrative example without solving it. Set new_question false, candidate_stuck false, hint_given false and verdict "none".'
+      : '',
     'DYNAMIC FLOW: After the minimum probes, keep a private satisfaction level (1 very dissatisfied to 5 fully satisfied) for the current question. Satisfied (4-5): acknowledge briefly and neutrally, then move to a NEW question on a different topic or angle. Neutral (3): one or two more probes. ' +
       'Dissatisfied (1-2) after two honest attempts (a hint counts as one): say calmly that you will move on and pose a different, possibly easier question. Never spend the whole interview on one topic, vary question types and difficulty with performance, and never reuse an angle you already used. ' +
       'Do not ask more than two questions from the same topic.',

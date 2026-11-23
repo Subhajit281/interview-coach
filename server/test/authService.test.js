@@ -44,3 +44,27 @@ test('registration is allowed while fewer than 25 users exist', async () => {
   assert.equal(user.id, 'new-user');
   assert.equal(fake.getCreateCalls(), 1);
 });
+
+test('a refresh token can only be rotated once', async () => {
+  const crypto = await import('node:crypto');
+  const rawToken = 'refresh-token-for-test';
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  let revoked = false;
+  let issued = 0;
+  const prisma = {
+    refreshToken: {
+      findUnique: async () => ({ id: 'refresh-1', tokenHash, revoked, expiresAt: new Date(Date.now() + 60_000), user: { id: 'user-1', email: 'u@example.com' } }),
+      updateMany: async ({ where }) => {
+        if (where.id !== 'refresh-1' || where.revoked !== false || revoked) return { count: 0 };
+        revoked = true;
+        return { count: 1 };
+      },
+      create: async () => { issued += 1; return {}; },
+    },
+  };
+  const auth = createAuthService({ prisma, config });
+
+  await auth.refresh(rawToken);
+  await assert.rejects(auth.refresh(rawToken), (error) => error.status === 401);
+  assert.equal(issued, 1);
+});

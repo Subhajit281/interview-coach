@@ -14,6 +14,14 @@ const FOLLOWUP_CAP = { standard: 3, rapid: 2, deep: 6 };
 const MIN_PROBES = { standard: 2, rapid: 1, deep: 3 };
 const VERDICTS = new Set(['correct', 'partial', 'incorrect', 'unclear', 'off_topic', 'stray', 'none']);
 
+// Clarification is part of an interview, not an answer. Flag common spoken
+// variants explicitly so the model does not grade the request or jump ahead.
+function isClarificationRequest(text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (!t || t === NO_RESPONSE || t.startsWith('[code]')) return false;
+  return /\b(can you|could you|please|would you)\s+(explain|clarify|repeat|rephrase|elaborate)\b|\b(explain|clarify|repeat|rephrase)\s+(the )?(question|problem|prompt)\b|\bwhat do you mean\b|\bi (do not|don't) understand\b/.test(t);
+}
+
 function parseMeta(m) {
   try { return m.meta ? JSON.parse(m.meta) : null; } catch { return null; }
 }
@@ -68,14 +76,24 @@ export function createInterviewer({ repo, llm, credentials = null }) {
   const threadById = new Map();
 
   async function ask(system, messages, request = {}) {
-    const res = await llm.chat({ system, messages, json: true, maxTokens: 900, temperature: 0.6, credentials, ...request });
+    // Secure routes keep one interviewer instance per user so its conversation
+    // state survives HTTP requests. Credentials themselves remain request
+    // scoped, allowing an API-key or model selection change to take effect on
+    // the very next turn.
+    const { credentials: requestCredentials, ...llmRequest } = request;
+    // A spoken turn only needs a brief private assessment plus a few sentences.
+    // A smaller response budget and low variance noticeably reduce dead air.
+    // GPT-OSS currently rejects some otherwise-valid generations when Groq's
+    // server-side JSON validator is enabled. The prompt still requests JSON,
+    // while extractJson() handles fenced/prose-wrapped responses locally.
+    const res = await llm.chat({ system, messages, json: false, maxTokens: 480, temperature: 0.45, credentials: requestCredentials ?? credentials, ...llmRequest });
     return { res, reply: parseInterviewerReply(res.text) };
   }
 
   async function generate(interviewId, elapsedSec = 0, request = {}) {
     const iv = await repo.getInterview(interviewId);
     const mode = MODES[iv.mode];
-    const history = await repo.getMessages(interviewId, 20);
+    const history = await repo.getMessages(interviewId, 12);
     const asked = await repo.interviewQuestions(interviewId);
     const thread = threadById.get(interviewId) || { followups: 0, sat: [] };
     const cap = FOLLOWUP_CAP[iv.style] || 3;
@@ -91,6 +109,8 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       rng: seededRng(interviewId * 104729 + asked.length * 7919 + history.length * 31 + 17),
     });
     const plan = { total: planQuestions({ durationMin: iv.duration_min, style: iv.style, mode: iv.mode }), asked: asked.length };
+    const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
+    const clarification = isClarificationRequest(lastCand?.content);
     const system = buildSystemPrompt({
       interview: iv,
       focusTopics,
@@ -105,6 +125,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       askedHere: asked.map((a) => a.title),
       coveredTopics: [...new Set(asked.map((a) => a.topic).filter(Boolean))],
       thread: { followups: thread.followups, sat: thread.sat.slice(-3), cap, min },
+      clarification,
     });
     const messages = history.length
       ? toLlmMessages(history)
@@ -113,7 +134,6 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     let { res, reply } = await ask(system, messages, request);
 
     // Guardrails: up to two corrective retries when the model closes early, skips the counter-question or judges without evidence.
-    const lastCand = [...history].reverse().find((m) => m.role === 'candidate');
     const genuine = lastCand && lastCand.content !== NO_RESPONSE;
     const remainingMin = iv.duration_min - elapsedSec / 60;
     const timeLeft = remainingMin > iv.duration_min * 0.2;
@@ -126,7 +146,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
           : `Pose a NEW main question now, built from the blueprint theme "${blueprint.seed || 'any fresh topic of this mode'}" (angle: ${blueprint.angle}); set new_question true with a short question_title.`;
         return `You tried to close the interview with about ${Math.round(remainingMin)} minutes left. Do NOT conclude, thank the candidate for their time or say goodbye. Set wrap_up false. ${how}`;
       }
-      if (genuine && r.newQuestion && !r.candidateStuck && r.verdict !== 'stray' && thread.followups < min && timeLeft && !r.wrapUp) {
+      if (!clarification && genuine && r.newQuestion && !r.candidateStuck && r.verdict !== 'stray' && thread.followups < min && timeLeft && !r.wrapUp) {
         return `You moved to a new question after only ${thread.followups} follow-up(s); at least ${min} are required. Do NOT change the question. Re-read the candidate's last answer and ask ONE counter-question about a specific claim, gap, edge case or trade-off in it. Set new_question false.`;
       }
       if (genuine && ['incorrect', 'unclear'].includes(r.verdict) && r.analysis.length < 30) {
@@ -176,7 +196,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     return { ...publicReply, interviewer: persona, strikes, provider: res.provider, model: res.model };
   }
 
-  async function start(cfg, { startRequestKey = null, signal } = {}) {
+  async function start(cfg, { startRequestKey = null, signal, credentials: requestCredentials = null } = {}) {
     const created = repo.createOrGetInterview
       ? await repo.createOrGetInterview({ ...cfg, startRequestKey })
       : { id: await repo.createInterview(cfg), created: true };
@@ -193,7 +213,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     try {
       // A first question is intentionally quick: the browser has a 90 s
       // connection window, so one provider should not consume it all.
-      const reply = await generate(interviewId, 0, { signal, timeoutMs: 15_000, retries: 1 });
+      const reply = await generate(interviewId, 0, { signal, timeoutMs: 15_000, retries: 1, credentials: requestCredentials });
       // Sessions created through the idempotent production path are only active
       // once their first interviewer message exists.
       await repo.setStatus(interviewId, 'active');
@@ -205,7 +225,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
     }
   }
 
-  async function turn(interviewId, { text, elapsedSec = 0 }) {
+  async function turn(interviewId, { text, elapsedSec = 0, credentials: requestCredentials = null }) {
     const iv = await repo.getInterview(interviewId);
     if (!iv) throw Object.assign(new Error('Interview not found'), { status: 404 });
     if (iv.status === 'paused') throw Object.assign(new Error('Interview is paused. Resume it first.'), { status: 409 });
@@ -223,7 +243,7 @@ export function createInterviewer({ repo, llm, credentials = null }) {
       if (!last || last.role !== 'candidate') throw Object.assign(new Error('Nothing to respond to.'), { status: 400 });
     }
     try {
-      return await generate(interviewId, elapsedSec);
+      return await generate(interviewId, elapsedSec, { credentials: requestCredentials });
     } catch (e) {
       if (e instanceof ProviderError) e.message = `Interviewer could not respond: ${e.message}`;
       throw e;

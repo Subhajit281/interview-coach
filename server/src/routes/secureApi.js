@@ -21,10 +21,23 @@ async function configFor(body, repo) {
   return { mode, company, position, difficulty: b.difficulty, personality: b.personality, durationMin, style: STYLES[b.style] ? b.style : 'standard', round: COMPANIES[company].rounds.includes(b.round) ? b.round : COMPANIES[company].rounds[0], projectId };
 }
 export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker }) {
-  const r = Router(), busy = new Set(), starts = createStartGuard();
+  const r = Router(), busy = new Set(), starts = createStartGuard(), interviewers = new Map();
   const repo = (req) => repoForUser(req.userId);
   const modelsFor = async (userId, keys = null) => catalogFor(config, await credentials.modelCatalog(userId, keys));
-  const services = async (req) => { const rawKeys = await credentials.resolve(req.userId); const modelData = await modelsFor(req.userId, rawKeys); const keys = { ...rawKeys, models: { ...modelData.defaults, ...parseModelPrefs(modelData, req.get('x-model-prefs'), { ignoreUnknown: true }) } }; const current = repo(req); return { repo: current, interviewer: createInterviewer({ repo: current, llm, credentials: keys }), evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys }; };
+  const services = async (req) => {
+    const rawKeys = await credentials.resolve(req.userId);
+    const modelData = await modelsFor(req.userId, rawKeys);
+    const keys = { ...rawKeys, models: { ...modelData.defaults, ...parseModelPrefs(modelData, req.get('x-model-prefs'), { ignoreUnknown: true }) } };
+    const current = repo(req);
+    // The old code built this object per request, so follow-up counts and
+    // unanswered-answer strikes were erased before every voice turn.
+    let interviewer = interviewers.get(req.userId);
+    if (!interviewer) {
+      interviewer = createInterviewer({ repo: current, llm });
+      interviewers.set(req.userId, interviewer);
+    }
+    return { repo: current, interviewer, evaluator: createEvaluator({ repo: current, llm, credentials: keys }), keys };
+  };
   r.get('/health', (_q, res) => res.json({ ok: true, authRequired: true }));
   r.get('/meta', wrap(async (req, res) => res.json({ modes: Object.entries(MODES).map(([id, m]) => ({ id, label: m.label, topics: m.topics })), companies: Object.entries(COMPANIES).map(([id, c]) => ({ id, name: c.name, style: c.style, rounds: c.rounds, defaultDurationMin: c.defaultDurationMin })), personalities: Object.entries(PERSONALITIES).map(([id, p]) => ({ id, label: p.label })), styles: Object.entries(STYLES).map(([id, d]) => ({ id, label: d.split(':')[0] })), positions: POSITIONS, difficulties: DIFFICULTIES, durations: DURATIONS, providers: await credentials.status(req.userId) })));
   r.get('/models', wrap(async (req, res) => {
@@ -62,7 +75,7 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
         // A lost response can retry a completed idempotent request even after
         // the history cap was reached; it must return that same session.
         if (!(await s.repo.getInterviewByStartRequestKey?.(startRequestKey))) await assertCanStartInterview(s.repo);
-        const started = await s.interviewer.start(cfg, { startRequestKey, signal: controller.signal });
+        const started = await s.interviewer.start(cfg, { startRequestKey, signal: controller.signal, credentials: s.keys });
         await recordInterviewStart(s.repo);
         return started;
       });
@@ -81,7 +94,7 @@ export function secureApiRouter({ repoForUser, llm, stt, credentials, tracker })
       req.removeListener('aborted', abort);
     }
   }));
-  r.post('/interviews/:id/turn', wrap(async (req, res) => { const key = `${req.userId}:${req.params.id}`; if (busy.has(key)) throw err(409, 'The previous turn is still being processed.'); busy.add(key); try { const s = await services(req); res.json(await s.interviewer.turn(req.params.id, { text: req.body?.text, elapsedSec: Number(req.body?.elapsedSec) || 0 })); } finally { busy.delete(key); } }));
+  r.post('/interviews/:id/turn', wrap(async (req, res) => { const key = `${req.userId}:${req.params.id}`; if (busy.has(key)) throw err(409, 'The previous turn is still being processed.'); busy.add(key); try { const s = await services(req); res.json(await s.interviewer.turn(req.params.id, { text: req.body?.text, elapsedSec: Number(req.body?.elapsedSec) || 0, credentials: s.keys })); } finally { busy.delete(key); } }));
   for (const [path, from, to] of [['/interviews/:id/pause', 'active', 'paused'], ['/interviews/:id/resume', 'paused', 'active']]) r.post(path, wrap(async (req, res) => { const current = repo(req), interview = await current.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status !== from) throw err(409, `Interview is ${interview.status}.`); await current.setStatus(interview.id, to); res.json({ ok: true, status: to }); }));
   r.post('/interviews/:id/end', wrap(async (req, res) => { const s = await services(req), interview = await s.repo.getInterview(req.params.id); if (!interview) throw err(404, 'Interview not found.'); if (interview.status === 'completed') return res.json({ interviewId: interview.id, report: await s.repo.getReport(interview.id) }); const messages = await s.repo.getMessages(interview.id); if (messages.filter((m) => m.role === 'candidate').length < 2) { await s.repo.finishInterview(interview.id, 'abandoned', req.body?.elapsedSec); return res.json({ interviewId: interview.id, report: null, note: 'Too short to evaluate (fewer than 2 answers).' }); } await s.repo.finishInterview(interview.id, 'completed', req.body?.elapsedSec); try { res.json({ interviewId: interview.id, report: await s.evaluator.evaluate(interview.id) }); } catch (e) { if (e?.publicMessage) throw e; throw err(502, 'Interview was saved, but the report could not be generated. You can retry it.'); } }));
   r.post('/interviews/:id/report', wrap(async (req, res) => { const s = await services(req); if (!(await s.repo.getInterview(req.params.id))) throw err(404, 'Interview not found.'); res.json({ report: await s.evaluator.evaluate(req.params.id) }); }));

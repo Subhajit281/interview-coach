@@ -3,34 +3,35 @@
 // a per-key list from the provider instead of this static catalogue.
 export const MODEL_CATALOG = {
   groq: [
-    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Best all-round quality on Groq' },
-    { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Fast, good reasoning, separate quota' },
+    { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'Recommended fast default for short interview turns' },
+    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'Higher-quality fallback for harder technical questions' },
+    { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', note: 'Current Groq reasoning alternative; verify availability with your key' },
   ],
   gemini: [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: 'Best all-round quality on Gemini' },
-    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', note: 'Fastest, larger free allowance' },
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', note: 'Reliable, separate quota' },
-    { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite', note: 'Lightest, separate quota' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', note: 'Recommended balanced free-tier default' },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', note: 'Lower-latency, high-throughput free-tier option' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', note: 'Current higher-capability Flash option; verify availability with your key' },
   ],
 };
 
 export const PROVIDER_LABEL = { groq: 'Groq', gemini: 'Gemini' };
 const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct']);
+const RETIRED_GEMINI_MODELS = new Set(['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001', 'gemini-2.5-flash']);
 
 const fail = (message, code, extra = {}) => Object.assign(new Error(message), { status: 400, code, publicMessage: message, ...extra });
 
 /** Catalog for the UI. The server default is always included so the dropdown can show what is active. */
-const lightest = {
-  groq: ['openai/gpt-oss-20b', 'llama-3.1-8b-instant'],
-  gemini: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash'],
+const preferred = {
+  groq: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b'],
+  gemini: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
 };
 
 const rank = (provider, model) => {
   const id = model.id.toLowerCase();
-  const known = lightest[provider].indexOf(id);
+  const known = preferred[provider].indexOf(id);
   if (known !== -1) return known;
-  if (/flash-lite|\bmini\b|\bsmall\b|\b8b\b/.test(id)) return 10;
-  if (/\bflash\b|\b20b\b/.test(id)) return 20;
+  if (/flash-lite|\bmini\b|\bsmall\b|\b8b\b/.test(id)) return 20;
+  if (/\bflash\b|\b20b\b/.test(id)) return 30;
   return 100;
 };
 
@@ -80,9 +81,9 @@ export function parseModelPrefs(catalogData, headerValue, { ignoreUnknown = fals
   for (const p of Object.keys(MODEL_CATALOG)) {
     const m = typeof raw[p] === 'string' ? raw[p].trim() : '';
     if (!m) continue;
-    // Browser preferences survive deployments. Silently fall back to the new
-    // server default when that stored Groq model was retired.
-    if (p === 'groq' && RETIRED_GROQ_MODELS.has(m)) continue;
+    // Browser preferences survive deployments. Silently fall back when a
+    // saved ID was retired instead of sending it to a provider.
+    if ((p === 'groq' && RETIRED_GROQ_MODELS.has(m)) || (p === 'gemini' && RETIRED_GEMINI_MODELS.has(m))) continue;
     if (ignoreUnknown && !isAllowedModel(catalogData, p, m)) continue;
     assertAllowedModel(catalogData, p, m);
     out[p] = m;

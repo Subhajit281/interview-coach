@@ -8,7 +8,7 @@ import { parseModelPrefs, catalogFor, MODEL_CATALOG } from '../src/data/models.j
 const cfg = (over = {}) => ({
   allowDevelopmentProviderKeys: false,
   groq: { llmModel: 'openai/gpt-oss-120b', llmFallbackModel: 'openai/gpt-oss-20b' },
-  gemini: { model: 'gemini-2.5-flash' },
+  gemini: { model: 'gemini-3.6-flash' },
   ...over,
 });
 const keys = (extra = {}) => ({ groqKey: 'g', geminiKey: '', models: {}, ...extra });
@@ -49,8 +49,8 @@ test('the other provider still takes over when the user has both keys', async ()
   const groq = { chat: async () => { throw quota(); } };
   const gemini = { chat: async ({ model }) => ({ text: 'ok', provider: 'gemini', model }) };
   const llm = createLlm({ config: cfg(), groq, gemini, log: { warn() {} } });
-  const out = await llm.chat({ system: 's', messages: [], credentials: keys({ geminiKey: 'k', models: { gemini: 'gemini-2.0-flash' } }) });
-  assert.equal(out.model, 'gemini-2.0-flash');
+  const out = await llm.chat({ system: 's', messages: [], credentials: keys({ geminiKey: 'k', models: { gemini: 'gemini-3.5-flash-lite' } }) });
+  assert.equal(out.model, 'gemini-3.5-flash-lite');
 });
 
 test('probe and friendly turn a rejected model into a coded error', async () => {
@@ -61,7 +61,8 @@ test('probe and friendly turn a rejected model into a coded error', async () => 
 
 test('model prefs only accept ids from the dropdown list', () => {
   const c = cfg();
-  assert.deepEqual(parseModelPrefs(c, JSON.stringify({ groq: 'llama-3.1-8b-instant', gemini: 'gemini-2.0-flash' })), { gemini: 'gemini-2.0-flash' });
+  assert.deepEqual(parseModelPrefs(c, JSON.stringify({ groq: 'llama-3.1-8b-instant', gemini: 'gemini-2.0-flash' })), {});
+  assert.deepEqual(parseModelPrefs(c, JSON.stringify({ gemini: 'gemini-3.5-flash-lite' })), { gemini: 'gemini-3.5-flash-lite' });
   assert.deepEqual(parseModelPrefs(c, undefined), {});
   assert.deepEqual(parseModelPrefs(c, 'not json'), {});
   assert.throws(() => parseModelPrefs(c, JSON.stringify({ groq: 'made-up-model' })), (e) => e.code === 'MODEL_INVALID' && /dropdown/.test(e.publicMessage));

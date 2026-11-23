@@ -98,7 +98,9 @@ export function createEvaluator({ repo, llm, credentials = null }) {
       `Questions asked: ${(await repo.questionsFor(interviewId)).map((q) => q.title).join('; ') || 'unknown'}\n\nTRANSCRIPT:\n`;
 
     const input = [{ role: 'user', content: header + buildTranscript(messages) }];
-    const call = (system, key) => llm.chat({ prefer: 'gemini', system, messages: input, json: true, maxTokens: 7000, temperature: 0.2, dedupeKey: `eval:${key}:${interviewId}`, credentials });
+    // Parse locally for the same reason as live turns: a provider's strict
+    // JSON validator can reject a useful response before it reaches us.
+    const call = (system, key) => llm.chat({ prefer: 'gemini', system, messages: input, json: false, maxTokens: 7000, temperature: 0.2, dedupeKey: `eval:${key}:${interviewId}`, credentials });
     // Two smaller calls in parallel are faster and far less likely to be cut off than one huge JSON document.
     const [main, qs] = await Promise.allSettled([call(EVAL_SYSTEM, 'main'), call(EVAL_QUESTIONS_SYSTEM, 'questions')]);
     if (main.status === 'rejected') throw main.reason;

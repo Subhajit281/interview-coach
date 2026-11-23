@@ -1,4 +1,10 @@
 let accessToken = null;
+// Refresh tokens are deliberately rotated by the server.  When a page resumes
+// after the access token has expired, several requests (dashboard cards,
+// interview state, etc.) can receive 401 together.  They must share one
+// refresh request; otherwise the first response rotates the cookie and a
+// second refresh incorrectly looks like a logged-out session.
+let refreshInFlight = null;
 export const session = { set: (token) => { accessToken = token || null; }, clear: () => { accessToken = null; }, token: () => accessToken };
 
 // Models the user picked from the dropdown. Kept per account in this browser and sent with every request;
@@ -34,7 +40,19 @@ async function req(path, { method = 'GET', body, form, retry = true, signal, hea
   });
   let data = null;
   try { data = await res.json(); } catch { /* non-json */ }
-  if (res.status === 401 && retry && path !== '/auth/refresh' && !path.startsWith('/auth/')) { try { const refreshed = await req('/auth/refresh', { method: 'POST', retry: false, signal }); accessToken = refreshed.accessToken; return req(path, { method, body, form, retry: false, signal, headers }); } catch { accessToken = null; } }
+  if (res.status === 401 && retry && path !== '/auth/refresh' && !path.startsWith('/auth/')) {
+    try {
+      // Do not attach the caller's abort signal to the shared refresh. One
+      // cancelled request must not cancel a refresh another live request needs.
+      if (!refreshInFlight) {
+        refreshInFlight = req('/auth/refresh', { method: 'POST', retry: false })
+          .then((refreshed) => { accessToken = refreshed.accessToken; return refreshed; })
+          .finally(() => { refreshInFlight = null; });
+      }
+      await refreshInFlight;
+      return req(path, { method, body, form, retry: false, signal, headers });
+    } catch { accessToken = null; }
+  }
   if (!res.ok) {
     const e = new Error(data?.error || `Request failed (${res.status}). Is the server running?`);
     Object.assign(e, { status: res.status, code: data?.code, provider: data?.provider, model: data?.model, reason: data?.reason, exhausted: data?.exhausted });
@@ -49,7 +67,14 @@ export const api = {
   health: ({ signal } = {}) => req('/health', { signal, retry: false }),
   register: (body) => req('/auth/register', { method: 'POST', body }),
   login: (body) => req('/auth/login', { method: 'POST', body }).then((r) => { accessToken = r.accessToken; return r; }),
-  refresh: () => req('/auth/refresh', { method: 'POST' }).then((r) => { accessToken = r.accessToken; return r; }),
+  refresh: () => {
+    if (!refreshInFlight) {
+      refreshInFlight = req('/auth/refresh', { method: 'POST', retry: false })
+        .then((r) => { accessToken = r.accessToken; return r; })
+        .finally(() => { refreshInFlight = null; });
+    }
+    return refreshInFlight;
+  },
   logout: () => req('/auth/logout', { method: 'POST' }).finally(() => { accessToken = null; }),
   me: () => req('/auth/me'),
   credentials: () => req('/auth/credentials'),

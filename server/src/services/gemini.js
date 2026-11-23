@@ -18,8 +18,9 @@ export function createGemini({ config, fetchImpl = fetch, sleep }) {
   async function chat({ model, system, messages, json = false, maxTokens = 700, temperature = 0.7, apiKey, signal, timeoutMs, retries }) {
     const generationConfig = { temperature, maxOutputTokens: maxTokens };
     if (json) generationConfig.responseMimeType = 'application/json';
-    // Skip "thinking" on 2.5 Flash for low latency; the interviewer turn does not need it.
-    if (/2\.5-flash/.test(model) && maxTokens <= 1500) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    // Interview turns are short conversational responses. Disable optional
+    // thinking on Flash models to keep the spoken exchange responsive.
+    if (/gemini-(?:2\.5|3\.[568])-flash(?:-lite)?/.test(model) && maxTokens <= 1500) generationConfig.thinkingConfig = { thinkingBudget: 0 };
 
     const res = await fetchWithRetry(
       `${BASE}/${model}:generateContent`,

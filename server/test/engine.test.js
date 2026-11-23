@@ -292,6 +292,22 @@ test('a premature topic switch triggers one corrective retry for a counter-quest
   } finally { close(); }
 });
 
+test('a request to explain the question stays on the same thread and receives explicit voice guidance', async () => {
+  const { call, llm, close } = await boot([
+    reply({ say: 'Given daily temperatures, return how many days until a warmer day for each entry.', board: 'Input: [73,74,75]. Output: [1,1,0].', new_question: true, question_title: 'Daily temperatures', topic: 'Stacks' }),
+    reply({ say: 'You receive a list of temperatures. For each day, say how many later days you would wait to see a warmer temperature. For example, for 73, 74, 75, the result is 1, 1, 0. What approach would you use?', verdict: 'none' }),
+  ]);
+  try {
+    const id = (await call('/interviews', 'POST', CFG)).data.interview.id;
+    const r = await call(`/interviews/${id}/turn`, 'POST', { text: 'Can you explain the question?', elapsedSec: 20 });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.newQuestion, false);
+    assert.match(llm.calls[1].system, /CLARIFICATION REQUEST/);
+    assert.equal(llm.calls[1].maxTokens, 480);
+    assert.equal(llm.calls[1].json, false);
+  } finally { close(); }
+});
+
 test('weaknesses and focus never leak across modes; the sql session does not shape core cs', async () => {
   const db = openDb(':memory:');
   const repo = createRepo(db);

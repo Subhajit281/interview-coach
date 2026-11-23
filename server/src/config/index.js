@@ -25,6 +25,6 @@ export const config = {
   allowDevelopmentProviderKeys: !production && env.ALLOW_DEVELOPMENT_PROVIDER_KEYS === 'true',
   dbPath: env.DB_PATH || './data/coach.db',
   groq: { apiKey: env.GROQ_API_KEY || '', sttModel: env.GROQ_STT_MODEL || 'whisper-large-v3-turbo', sttLanguage: env.STT_LANGUAGE || 'en', llmModel: groqModel, llmFallbackModel: groqFallbackModel },
-  gemini: { apiKey: env.GEMINI_API_KEY || '', model: env.GEMINI_MODEL || 'gemini-2.5-flash-lite' },
+  gemini: { apiKey: env.GEMINI_API_KEY || '', model: env.GEMINI_MODEL || 'gemini-3.6-flash' },
   sttDailyBudgetSec: Number(env.STT_DAILY_BUDGET_SEC || 28800),
 };
